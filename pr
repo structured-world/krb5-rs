@@ -1,0 +1,60 @@
+
+---
+Промпт 1 — Source Tree Inventory
+
+Мне нужно проанализировать кодовые базы-доноры для проекта krb5-rs (Pure Rust Kerberos V5).
+
+### Агент 1: MIT krb5 (~/projects/sw/krb5-rs/donors/krb5/)
+
+ПРАВИЛА ФИЛЬТРАЦИИ:
+- ВКЛЮЧАТЬ: src/lib/krb5/ (core protocol), src/lib/gssapi/ (GSSAPI mechanism),
+  src/lib/crypto/ (encryption), src/kdc/ (KDC server — reference for protocol understanding)
+- ИСКЛЮЧАТЬ: src/tests/, src/windows/, src/util/, doc/, src/plugins/ (кроме preauth)
+- ИСКЛЮЧАТЬ: файлы < 20 строк
+
+Focus: ASN.1 encoding (src/lib/krb5/asn.1/), KDC request processing, GSSAPI init_sec_context/accept_sec_context,
+crypto backends (src/lib/crypto/), credential cache (src/lib/krb5/ccache/)
+
+### Агент 2: Heimdal (~/projects/sw/krb5-rs/donors/heimdal/)
+
+Focus: lib/krb5/ (core), lib/gssapi/ (GSSAPI), lib/asn1/ (ASN.1 compiler — shows type definitions)
+
+### Агент 3: sspi-rs (~/projects/sw/krb5-rs/donors/sspi-rs/)
+
+Focus: src/kerberos/ (Rust Kerberos implementation within SSPI context — BEST starting point for Rust patterns)
+
+### Агент 4: kerbeiros (~/projects/sw/krb5-rs/donors/kerbeiros/)
+
+Focus: src/ (archived but working Rust Kerberos client — reusable code for TGT/TGS request)
+
+---
+
+Промпт 2 — Feature-Targeted Deep Analysis
+
+FEATURE-БЛОКИ (10 штук):
+
+1. ASN.1 Kerberos Types — DER/BER encoding, type definitions from RFC 4120 Appendix A
+2. AS-REQ / AS-REP — Initial authentication, pre-authentication data
+3. TGS-REQ / TGS-REP — Service ticket acquisition
+4. GSSAPI Init Context — RFC 4121 initiator side, token generation
+5. GSSAPI Accept Context — RFC 4121 acceptor side, token validation
+6. SPNEGO — Negotiate mechanism selection (RFC 4178)
+7. Crypto: AES-CTS-HMAC-SHA — RFC 3962 primary encryption type
+8. Crypto: RC4-HMAC — Legacy encryption (for AD compatibility)
+9. PKINIT — RFC 4556 X.509 certificate pre-authentication
+10. Credential Cache — ccache/keytab file format read/write
+
+---
+
+Промпт 3 — Architecture Documents
+
+arch/protocol.md, arch/gssapi.md, arch/crypto.md, arch/pkinit.md, arch/ROADMAP.md, arch/DECISIONS.md
+
+---
+
+Промпт 4 — Roadmap
+
+Phase 1 (4 мес): ASN.1 types + AS-REQ/TGS-REQ client + basic crypto → ticket acquisition works
+Phase 2 (4 мес): GSSAPI/SPNEGO mechanism → HTTP Negotiate auth works
+Phase 3 (3 мес): PKINIT + FAST → modern Kerberos features
+Phase 4 (3 мес): kadmin + ccache/keytab + integration tests against real MIT KDC
