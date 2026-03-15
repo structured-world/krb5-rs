@@ -3,6 +3,7 @@
 use rasn::prelude::*;
 
 use super::basic::*;
+use super::flags::{ApOptions, KerberosFlags};
 use super::primitives::*;
 use super::ticket::Ticket;
 
@@ -15,7 +16,7 @@ pub struct ApReq {
     #[rasn(tag(explicit(context, 1)))]
     pub msg_type: i32,
     #[rasn(tag(explicit(context, 2)))]
-    pub ap_options: BitString,
+    pub ap_options: KerberosFlags<ApOptions>,
     #[rasn(tag(explicit(context, 3)))]
     pub ticket: Ticket,
     #[rasn(tag(explicit(context, 4)))]

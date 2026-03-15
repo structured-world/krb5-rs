@@ -3,6 +3,7 @@
 use rasn::prelude::*;
 
 use super::basic::*;
+use super::flags::{KdcOptions, KerberosFlags, TicketFlags};
 use super::preauth::PaData;
 use super::primitives::*;
 use super::ticket::Ticket;
@@ -11,7 +12,7 @@ use super::ticket::Ticket;
 #[derive(AsnType, Encode, Decode, Debug, Clone)]
 pub struct KdcReqBody {
     #[rasn(tag(explicit(context, 0)))]
-    pub kdc_options: BitString,
+    pub kdc_options: KerberosFlags<KdcOptions>,
     #[rasn(tag(explicit(context, 1)))]
     pub cname: Option<PrincipalName>,
     #[rasn(tag(explicit(context, 2)))]
@@ -100,7 +101,7 @@ pub struct EncKdcRepPart {
     #[rasn(tag(explicit(context, 3)))]
     pub key_expiration: Option<KerberosTime>,
     #[rasn(tag(explicit(context, 4)))]
-    pub flags: BitString,
+    pub flags: KerberosFlags<TicketFlags>,
     #[rasn(tag(explicit(context, 5)))]
     pub authtime: KerberosTime,
     #[rasn(tag(explicit(context, 6)))]

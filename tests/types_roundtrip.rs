@@ -64,8 +64,16 @@ fn make_time() -> KerberosTime {
         .fixed_offset()
 }
 
-fn make_bitstring_flags() -> BitString {
-    BitString::from_slice(&[0x40, 0x80, 0x00, 0x00])
+fn make_kdc_options() -> KerberosFlags<KdcOptions> {
+    KerberosFlags::from(KdcOptions::FORWARDABLE | KdcOptions::RENEWABLE)
+}
+
+fn make_ticket_flags() -> KerberosFlags<TicketFlags> {
+    KerberosFlags::from(TicketFlags::FORWARDABLE | TicketFlags::RENEWABLE)
+}
+
+fn make_ap_options() -> KerberosFlags<ApOptions> {
+    KerberosFlags::from(ApOptions::MUTUAL_REQUIRED)
 }
 
 // --- Primitive/Basic type tests ---
@@ -238,7 +246,7 @@ fn test_etype_info2_entry_roundtrip() {
 #[test]
 fn test_kdc_req_body_roundtrip() {
     let body = KdcReqBody {
-        kdc_options: make_bitstring_flags(),
+        kdc_options: make_kdc_options(),
         cname: Some(make_principal()),
         realm: make_realm(),
         sname: Some(make_srv_principal()),
@@ -261,7 +269,7 @@ fn test_as_req_roundtrip() {
         msg_type: 10,
         padata: None,
         req_body: KdcReqBody {
-            kdc_options: make_bitstring_flags(),
+            kdc_options: make_kdc_options(),
             cname: Some(make_principal()),
             realm: make_realm(),
             sname: Some(make_srv_principal()),
@@ -285,7 +293,7 @@ fn test_as_req_application_tag() {
         msg_type: 10,
         padata: None,
         req_body: KdcReqBody {
-            kdc_options: make_bitstring_flags(),
+            kdc_options: make_kdc_options(),
             cname: Some(make_principal()),
             realm: make_realm(),
             sname: Some(make_srv_principal()),
@@ -314,7 +322,7 @@ fn test_tgs_req_application_tag() {
         msg_type: 12,
         padata: None,
         req_body: KdcReqBody {
-            kdc_options: make_bitstring_flags(),
+            kdc_options: make_kdc_options(),
             cname: None,
             realm: make_realm(),
             sname: Some(PrincipalName::new_srv_hst("HTTP", "web.example.com")),
@@ -365,7 +373,7 @@ fn test_enc_kdc_rep_part_roundtrip() {
         }],
         nonce: 42,
         key_expiration: None,
-        flags: make_bitstring_flags(),
+        flags: make_ticket_flags(),
         authtime: make_time(),
         starttime: None,
         endtime: make_time(),
@@ -385,7 +393,7 @@ fn test_ap_req_roundtrip() {
     let req = ApReq {
         pvno: 5,
         msg_type: 14,
-        ap_options: make_bitstring_flags(),
+        ap_options: make_ap_options(),
         ticket: Ticket {
             tkt_vno: 5,
             realm: make_realm(),
@@ -402,7 +410,7 @@ fn test_ap_req_application_tag() {
     let req = ApReq {
         pvno: 5,
         msg_type: 14,
-        ap_options: make_bitstring_flags(),
+        ap_options: make_ap_options(),
         ticket: Ticket {
             tkt_vno: 5,
             realm: make_realm(),
@@ -587,7 +595,7 @@ fn test_kdc_proxy_message_roundtrip() {
 #[test]
 fn test_kdc_options_flags() {
     let opts = KdcOptions::FORWARDABLE | KdcOptions::RENEWABLE | KdcOptions::CANONICALIZE;
-    let bytes = opts.to_bytes();
+    let bytes = Flags::to_bytes(&opts);
     let restored = KdcOptions::from_bytes(&bytes);
     assert_eq!(opts, restored);
     assert!(restored.contains(KdcOptions::FORWARDABLE));
@@ -599,7 +607,7 @@ fn test_kdc_options_flags() {
 #[test]
 fn test_ticket_flags() {
     let flags = TicketFlags::FORWARDABLE | TicketFlags::INITIAL | TicketFlags::PRE_AUTHENT;
-    let bytes = flags.to_bytes();
+    let bytes = Flags::to_bytes(&flags);
     let restored = TicketFlags::from_bytes(&bytes);
     assert_eq!(flags, restored);
 }
@@ -607,11 +615,69 @@ fn test_ticket_flags() {
 #[test]
 fn test_ap_options_flags() {
     let opts = ApOptions::MUTUAL_REQUIRED;
-    let bytes = opts.to_bytes();
+    let bytes = Flags::to_bytes(&opts);
     let restored = ApOptions::from_bytes(&bytes);
     assert_eq!(opts, restored);
     assert!(restored.contains(ApOptions::MUTUAL_REQUIRED));
     assert!(!restored.contains(ApOptions::USE_SESSION_KEY));
+}
+
+#[test]
+fn test_kerberos_flags_wrapper_roundtrip() {
+    // KerberosFlags<T> should round-trip through DER as BIT STRING
+    let kdc_flags = KerberosFlags::from(
+        KdcOptions::FORWARDABLE | KdcOptions::RENEWABLE | KdcOptions::CANONICALIZE,
+    );
+    roundtrip_eq(&kdc_flags);
+
+    let ticket_flags = KerberosFlags::from(
+        TicketFlags::INITIAL | TicketFlags::PRE_AUTHENT | TicketFlags::FORWARDABLE,
+    );
+    roundtrip_eq(&ticket_flags);
+
+    let ap_flags = KerberosFlags::from(ApOptions::MUTUAL_REQUIRED);
+    roundtrip_eq(&ap_flags);
+}
+
+#[test]
+fn test_kerberos_flags_deref() {
+    // Deref allows direct bitflags operations on the wrapper
+    let flags = KerberosFlags::from(KdcOptions::FORWARDABLE | KdcOptions::RENEWABLE);
+    assert!(flags.contains(KdcOptions::FORWARDABLE));
+    assert!(flags.contains(KdcOptions::RENEWABLE));
+    assert!(!flags.contains(KdcOptions::PROXIABLE));
+}
+
+#[test]
+fn test_kerberos_flags_deref_mut() {
+    // DerefMut allows in-place modification
+    let mut flags = KerberosFlags::from(KdcOptions::FORWARDABLE);
+    flags.insert(KdcOptions::RENEWABLE);
+    assert!(flags.contains(KdcOptions::FORWARDABLE));
+    assert!(flags.contains(KdcOptions::RENEWABLE));
+}
+
+#[test]
+fn test_kerberos_flags_default_is_empty() {
+    let flags = KerberosFlags::<KdcOptions>::default();
+    assert!(flags.is_empty());
+}
+
+#[test]
+fn test_kerberos_flags_type_safety() {
+    // KerberosFlags<KdcOptions> and KerberosFlags<TicketFlags> are distinct types.
+    // This test verifies the typed wrapper encodes correctly for each flag type.
+    let kdc = KerberosFlags::from(KdcOptions::FORWARDABLE);
+    let ticket = KerberosFlags::from(TicketFlags::FORWARDABLE);
+
+    let kdc_encoded = der::encode(&kdc).unwrap();
+    let ticket_encoded = der::encode(&ticket).unwrap();
+
+    // Both FORWARDABLE are bit 1 (same position), so encoding should match
+    assert_eq!(kdc_encoded, ticket_encoded);
+
+    // But you cannot accidentally assign one to the other at compile time:
+    // let _bad: KerberosFlags<KdcOptions> = ticket;  // won't compile
 }
 
 // --- Enum conversion tests ---
@@ -827,7 +893,7 @@ fn test_etype_info2_roundtrip() {
 #[test]
 fn test_enc_ticket_part_roundtrip() {
     let etp = EncTicketPart {
-        flags: make_bitstring_flags(),
+        flags: make_ticket_flags(),
         key: make_encryption_key(),
         crealm: make_realm(),
         cname: make_principal(),
@@ -856,7 +922,7 @@ fn test_krb_cred_info_roundtrip() {
         key: make_encryption_key(),
         prealm: Some(make_realm()),
         pname: Some(make_principal()),
-        flags: Some(make_bitstring_flags()),
+        flags: Some(make_ticket_flags()),
         authtime: Some(make_time()),
         starttime: None,
         endtime: Some(make_time()),
