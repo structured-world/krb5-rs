@@ -14,36 +14,44 @@ readme = "README.md"
 
 [dependencies]
 # ASN.1 DER encoding/decoding
-rasn = "0.22"
-rasn-kerberos = "0.16"
+rasn = "0.28"
 
 # Crypto
 aes = "0.8"
 hmac = "0.12"
+sha1 = "0.10"
 sha2 = "0.10"
-md5 = "0.7"            # Legacy RC4-HMAC support
-rand = "0.8"
+md-5 = "0.10"              # Legacy RC4-HMAC + GSSAPI channel bindings
+pbkdf2 = "0.12"
+subtle = "2"               # Constant-time comparison
+rand = "0.9"
+zeroize = { version = "1", features = ["derive"] }
+
+# Flags
+bitflags = "2"
 
 # Network
-tokio = { version = "1", features = ["net", "io-util", "time"] }
+tokio = { version = "1.50", features = ["net", "io-util", "time"], optional = true }
 
 # Error handling
-thiserror = "2"
+thiserror = "2.0"
 
 [dev-dependencies]
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.50", features = ["full"] }
+chrono = "0.4"
 
 [features]
 default = ["client", "gssapi"]
-client = []            # Kerberos client (TGT/TGS request)
-gssapi = []            # GSSAPI/SPNEGO mechanism
+client = []                # Kerberos client (TGT/TGS request)
+gssapi = []                # GSSAPI/SPNEGO mechanism
 pkinit = ["dep:x509-parser", "dep:rcgen"]  # PKINIT (X.509 + Kerberos)
-fast = []              # FAST pre-authentication tunneling
+fast = []                  # FAST pre-authentication tunneling
+tokio = ["dep:tokio"]      # Tokio async transport adapter
 
 [dependencies.x509-parser]
-version = "0.16"
+version = "0.18"
 optional = true
 
 [dependencies.rcgen]
-version = "0.13"
+version = "0.14"
 optional = true

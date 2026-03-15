@@ -13,14 +13,10 @@
 //! ## Quick Start
 //!
 //! ```rust,no_run
-//! use krb5_rs::client::KerberosClient;
+//! use krb5_rs::types::{PrincipalName, AsReq};
 //!
-//! # async fn example() -> Result<(), Box<dyn std::error::Error>> {
-//! let client = KerberosClient::new("EXAMPLE.COM", "kdc.example.com:88").await?;
-//! let tgt = client.get_tgt("user", "password").await?;
-//! let ticket = client.get_service_ticket(&tgt, "HTTP/web.example.com").await?;
-//! # Ok(())
-//! # }
+//! let principal = PrincipalName::new_principal("user");
+//! assert_eq!(principal.to_string(), "user");
 //! ```
 
 #![deny(unsafe_code)]
@@ -28,14 +24,6 @@
 #![warn(missing_docs)]
 
 pub mod error;
-
-#[cfg(feature = "client")]
-pub mod client;
-
-pub mod crypto;
 pub mod types;
-
-#[cfg(feature = "gssapi")]
-pub mod gssapi;
 
 pub use error::Krb5Error;
