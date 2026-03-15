@@ -41,8 +41,8 @@ tokio = { version = "1.50", features = ["full"] }
 chrono = "0.4"
 
 [features]
-default = ["client", "gssapi"]
-client = []                # Kerberos client (TGT/TGS request)
+default = []
+client = []                # Kerberos client (TGT/TGS request) — planned
 gssapi = []                # GSSAPI/SPNEGO mechanism
 pkinit = ["dep:x509-parser", "dep:rcgen"]  # PKINIT (X.509 + Kerberos)
 fast = []                  # FAST pre-authentication tunneling

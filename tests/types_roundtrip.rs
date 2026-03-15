@@ -8,6 +8,7 @@ use rasn::{ber, der};
 
 use chrono::{TimeZone, Utc};
 use krb5_rs::types::*;
+use zeroize::Zeroize;
 
 /// Helper: encode to DER, decode back, re-encode, assert bytes match.
 fn roundtrip<T: rasn::Encode + rasn::Decode + core::fmt::Debug>(value: &T) {
@@ -655,7 +656,6 @@ fn test_ber_can_decode_der_ticket() {
 
 #[test]
 fn test_encryption_key_zeroize() {
-    use zeroize::Zeroize;
     let mut key = make_encryption_key();
     assert_eq!(key.key_bytes().len(), 6);
     assert_ne!(
