@@ -67,7 +67,8 @@ pub(crate) fn aes_cts_decrypt(key: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, 
 
     let mut plaintext = Vec::with_capacity(ciphertext.len());
 
-    // Step 1: CBC-decrypt all blocks before the last two
+    // Step 1: CBC-decrypt all blocks before the last two.
+    // For nblocks == 2, prev_iv stays zero — correct since CBC IV for the first block is zero.
     let mut prev_iv = [0u8; AES_BLOCK];
     if nblocks > 2 {
         let prefix_end = (nblocks - 2) * AES_BLOCK;

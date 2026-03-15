@@ -27,7 +27,7 @@ fn aes_encrypt(key: &[u8], key_usage: i32, plaintext: &[u8]) -> Result<Vec<u8>, 
     let ki = derive_key(key, key_usage, 0x55)?;
 
     let confounder = generate_random(AES_BLOCK);
-    let mut data = confounder;
+    let mut data = Zeroizing::new(confounder);
     data.extend_from_slice(plaintext);
 
     let hmac = hmac_sha1_96(&ki, &data);
@@ -512,6 +512,6 @@ mod tests {
         assert_eq!(e18.etype(), 18);
         assert_eq!(e18.key_length(), 32);
 
-        assert!(find_etype(23).is_err()); // RC4 not enabled
+        assert!(matches!(find_etype(23), Err(CryptoError::UnsupportedEtype)));
     }
 }

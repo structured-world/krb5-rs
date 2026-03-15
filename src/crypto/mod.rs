@@ -70,6 +70,10 @@ pub enum CryptoError {
     /// Checksum verification failed.
     #[error("checksum mismatch")]
     ChecksumMismatch,
+
+    /// Requested encryption type is not supported/registered.
+    #[error("unsupported encryption type")]
+    UnsupportedEtype,
 }
 
 /// A complete RFC 3961 encryption type profile.
@@ -153,5 +157,5 @@ pub fn find_etype(etype: i32) -> Result<&'static dyn EtypeProfile, CryptoError> 
     ETYPE_REGISTRY
         .get(&etype)
         .copied()
-        .ok_or(CryptoError::BadKeySize) // will be UnsupportedEtype at Krb5Error level
+        .ok_or(CryptoError::UnsupportedEtype)
 }

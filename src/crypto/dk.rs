@@ -37,11 +37,17 @@ pub(crate) fn dk(
 /// - `0xAA` -> encryption sub-key (Ke)
 /// - `0x55` -> integrity sub-key (Ki)
 /// - `0x99` -> checksum sub-key (Kc)
+///
+/// Negative key usage values are not supported and will cause a panic.
 pub(crate) fn derive_key(
     base_key: &[u8],
     key_usage: i32,
     derivation_byte: u8,
 ) -> Result<Zeroizing<Vec<u8>>, CryptoError> {
+    assert!(
+        key_usage >= 0,
+        "negative key_usage ({key_usage}) is not supported",
+    );
     let mut constant = (key_usage as u32).to_be_bytes().to_vec();
     constant.push(derivation_byte);
     let key_size = base_key.len();
