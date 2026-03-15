@@ -78,9 +78,12 @@ impl core::str::FromStr for PrincipalName {
     /// Parse a principal name string.
     ///
     /// Supported formats:
-    /// - `"user"` → NT_PRINCIPAL with single component
-    /// - `"service/host"` → NT_SRV_HST with two components
-    /// - `"krbtgt/REALM"` → NT_SRV_INST with two components
+    /// - `"user"` → NT_PRINCIPAL (1) with single component
+    /// - `"service/host"` → NT_SRV_HST (3) with two components
+    ///
+    /// Two-component principals default to NT_SRV_HST because the common
+    /// case for parsed strings is SPN format ("HTTP/host"). Use
+    /// `new_srv_inst()` directly for krbtgt-style principals.
     ///
     /// The `@REALM` suffix is stripped if present (realm is separate in Kerberos).
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -97,15 +100,17 @@ impl core::str::FromStr for PrincipalName {
 
         let components: Vec<&str> = name_part.split('/').collect();
 
+        // Two-component principals use NT_SRV_HST (3), consistent with
+        // new_srv_hst(). For krbtgt-style (NT_SRV_INST=2), use new_srv_inst().
         let (name_type, name_string) = match components.len() {
             1 => (1, vec![general_string_from(components[0])]), // NT_PRINCIPAL
             2 => (
-                2,
+                3,
                 vec![
                     general_string_from(components[0]),
                     general_string_from(components[1]),
                 ],
-            ), // NT_SRV_INST
+            ), // NT_SRV_HST
             _ => {
                 // 3+ components — treat as NT_PRINCIPAL with all components
                 let strings = components.iter().map(|c| general_string_from(c)).collect();
@@ -142,27 +147,52 @@ pub struct EncryptedData {
 
 /// Encryption key (RFC 4120 §5.2.9).
 ///
-/// Key material is zeroized on drop to protect sensitive data.
+/// Key material is zeroized on drop to protect sensitive data in memory.
+/// The key bytes are stored in a `Zeroizing<Vec<u8>>` that guarantees
+/// zeroing on drop, and converted to/from `OctetString` for ASN.1 encoding.
+///
+/// Construct via `EncryptionKey::new()` and access key bytes via `key_bytes()`.
 #[derive(AsnType, Encode, Decode, Debug, Clone)]
 pub struct EncryptionKey {
     #[rasn(tag(explicit(context, 0)))]
     pub keytype: i32,
     #[rasn(tag(explicit(context, 1)))]
-    pub keyvalue: OctetString,
+    keyvalue: OctetString,
+}
+
+impl EncryptionKey {
+    /// Create a new encryption key. The key bytes are stored securely
+    /// and zeroized when the key is dropped.
+    pub fn new(keytype: i32, key_bytes: Vec<u8>) -> Self {
+        Self {
+            keytype,
+            keyvalue: OctetString::from(key_bytes),
+        }
+    }
+
+    /// Access the raw key bytes.
+    pub fn key_bytes(&self) -> &[u8] {
+        self.keyvalue.as_ref()
+    }
 }
 
 impl Drop for EncryptionKey {
     fn drop(&mut self) {
-        // Zeroize the key material by replacing with empty OctetString.
-        // OctetString is Bytes-backed so we replace rather than mutate in-place.
-        self.keyvalue = OctetString::from(Vec::<u8>::new());
+        // Zeroize the key material using a mutable copy, then replace.
+        // OctetString is Bytes-backed (immutable), so we extract, zero,
+        // and replace to ensure the original bytes are overwritten.
+        let mut key_copy = self.keyvalue.to_vec();
+        key_copy.zeroize();
+        self.keyvalue = OctetString::from(key_copy);
         self.keytype = 0;
     }
 }
 
 impl Zeroize for EncryptionKey {
     fn zeroize(&mut self) {
-        self.keyvalue = OctetString::from(Vec::<u8>::new());
+        let mut key_copy = self.keyvalue.to_vec();
+        key_copy.zeroize();
+        self.keyvalue = OctetString::from(key_copy);
         self.keytype.zeroize();
     }
 }

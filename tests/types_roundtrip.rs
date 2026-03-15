@@ -38,10 +38,7 @@ fn make_encrypted_data() -> EncryptedData {
 }
 
 fn make_encryption_key() -> EncryptionKey {
-    EncryptionKey {
-        keytype: 18,
-        keyvalue: OctetString::from(vec![0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]),
-    }
+    EncryptionKey::new(18, vec![0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff])
 }
 
 fn make_checksum() -> Checksum {
@@ -651,9 +648,10 @@ fn test_ber_can_decode_der_ticket() {
 fn test_encryption_key_zeroize() {
     use zeroize::Zeroize;
     let mut key = make_encryption_key();
+    assert_eq!(key.key_bytes().len(), 6);
     key.zeroize();
     assert_eq!(key.keytype, 0);
-    assert!(key.keyvalue.as_ref().is_empty());
+    assert!(key.key_bytes().is_empty() || key.key_bytes().iter().all(|&b| b == 0));
 }
 
 // --- FromStr tests for PrincipalName ---
@@ -671,7 +669,9 @@ fn test_principal_from_str_service() {
     let p: PrincipalName = "krbtgt/EXAMPLE.COM"
         .parse()
         .expect("parse service principal");
-    assert_eq!(p.name_type, 2); // NT_SRV_INST
+    // FromStr uses NT_SRV_HST (3) for two-component principals.
+    // Use new_srv_inst() directly for NT_SRV_INST (2) krbtgt-style.
+    assert_eq!(p.name_type, 3); // NT_SRV_HST
     assert_eq!(p.name_string.len(), 2);
     assert_eq!(p.to_string(), "krbtgt/EXAMPLE.COM");
 }
@@ -691,7 +691,7 @@ fn test_principal_from_str_service_with_realm() {
     let p: PrincipalName = "HTTP/web.example.com@EXAMPLE.COM"
         .parse()
         .expect("parse SPN with realm");
-    assert_eq!(p.name_type, 2); // NT_SRV_INST
+    assert_eq!(p.name_type, 3); // NT_SRV_HST — consistent with new_srv_hst()
     assert_eq!(p.name_string.len(), 2);
     assert_eq!(p.to_string(), "HTTP/web.example.com");
 }
