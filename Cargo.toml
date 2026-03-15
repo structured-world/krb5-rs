@@ -21,7 +21,7 @@ rasn-kerberos = "0.16"
 aes = "0.8"
 hmac = "0.12"
 sha2 = "0.10"
-md5 = "0.7"            # Legacy RC4-HMAC support
+md5 = "0.8"            # Legacy RC4-HMAC support
 rand = "0.8"
 
 # Network
