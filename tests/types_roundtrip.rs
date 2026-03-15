@@ -17,6 +17,15 @@ fn roundtrip<T: rasn::Encode + rasn::Decode + core::fmt::Debug>(value: &T) {
     assert_eq!(encoded, re_encoded, "Round-trip mismatch for {:?}", decoded);
 }
 
+/// Helper: roundtrip with semantic equality check for types implementing PartialEq.
+fn roundtrip_eq<T: rasn::Encode + rasn::Decode + core::fmt::Debug + PartialEq>(value: &T) {
+    let encoded = der::encode(value).expect("DER encode failed");
+    let decoded: T = der::decode(&encoded).expect("DER decode failed");
+    assert_eq!(&decoded, value, "Semantic mismatch after decode");
+    let re_encoded = der::encode(&decoded).expect("DER re-encode failed");
+    assert_eq!(encoded, re_encoded, "Round-trip mismatch for {:?}", decoded);
+}
+
 fn make_realm() -> Realm {
     GeneralString::from_bytes(b"EXAMPLE.COM").expect("valid realm")
 }
@@ -62,7 +71,7 @@ fn make_bitstring_flags() -> BitString {
 
 #[test]
 fn test_principal_name_roundtrip() {
-    roundtrip(&make_principal());
+    roundtrip_eq(&make_principal());
 }
 
 #[test]
@@ -73,7 +82,7 @@ fn test_principal_name_srv_inst_roundtrip() {
 #[test]
 fn test_principal_name_srv_hst_roundtrip() {
     let p = PrincipalName::new_srv_hst("HTTP", "web.example.com");
-    roundtrip(&p);
+    roundtrip_eq(&p);
     assert_eq!(p.to_string(), "HTTP/web.example.com");
 }
 
@@ -92,7 +101,7 @@ fn test_host_address_roundtrip() {
         addr_type: 2, // IPv4
         address: OctetString::from(vec![192, 168, 1, 1]),
     };
-    roundtrip(&addr);
+    roundtrip_eq(&addr);
 }
 
 #[test]
@@ -649,9 +658,34 @@ fn test_encryption_key_zeroize() {
     use zeroize::Zeroize;
     let mut key = make_encryption_key();
     assert_eq!(key.key_bytes().len(), 6);
+    assert_ne!(
+        key.key_bytes(),
+        &[0u8; 6],
+        "key should not be zero before zeroize"
+    );
     key.zeroize();
-    assert_eq!(key.keytype, 0);
-    assert!(key.key_bytes().is_empty() || key.key_bytes().iter().all(|&b| b == 0));
+    assert_eq!(key.keytype, 0, "keytype must be zeroed");
+    // Vec::zeroize() zeroes bytes in-place then clears the vec (len=0).
+    // This is correct — key material was wiped before truncation,
+    // and clearing length prevents leaking even the key size.
+    assert!(
+        key.key_bytes().is_empty(),
+        "key_bytes must be empty after zeroize (zeroed then cleared)"
+    );
+}
+
+#[test]
+fn test_encryption_key_debug_redacted() {
+    let key = make_encryption_key();
+    let debug_output = format!("{:?}", key);
+    assert!(
+        debug_output.contains("redacted"),
+        "Debug output must redact key bytes, got: {debug_output}"
+    );
+    assert!(
+        !debug_output.contains("\\xaa"),
+        "Debug output must not contain raw key bytes"
+    );
 }
 
 // --- FromStr tests for PrincipalName ---
@@ -738,7 +772,7 @@ fn test_principal_from_str_roundtrip() {
     let original = "HTTP/host.example.com";
     let p: PrincipalName = original.parse().expect("parse");
     assert_eq!(p.to_string(), original);
-    roundtrip(&p);
+    roundtrip_eq(&p);
 }
 
 // --- Type alias tests ---
