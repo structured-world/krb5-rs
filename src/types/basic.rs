@@ -1,7 +1,8 @@
 //! Core Kerberos data structures (RFC 4120 §5.2).
 
 use rasn::prelude::*;
-use zeroize::Zeroize;
+use rasn::types::Identifier;
+use zeroize::{Zeroize, Zeroizing};
 
 use super::primitives::*;
 
@@ -14,37 +15,49 @@ pub struct PrincipalName {
     pub name_string: Vec<KerberosString>,
 }
 
-/// Convert a string slice to GeneralString.
-///
-/// Kerberos principal names are ASCII, so this conversion is infallible
-/// in practice. Falls back to empty string on conversion failure.
-fn general_string_from(s: &str) -> KerberosString {
+/// Convert a string slice to GeneralString, returning error on invalid bytes.
+fn try_general_string(s: &str) -> Result<KerberosString, ParsePrincipalError> {
     GeneralString::from_bytes(s.as_bytes())
-        .unwrap_or_else(|_| GeneralString::from_bytes(b"").expect("empty bytes are valid"))
+        .map_err(|e| ParsePrincipalError(format!("invalid principal component {s:?}: {e}")))
 }
 
 impl PrincipalName {
     /// Create a simple principal name (e.g., "user").
+    ///
+    /// # Panics
+    /// Panics if `name` contains non-printable characters.
     pub fn new_principal(name: &str) -> Self {
         Self {
             name_type: 1, // KRB5_NT_PRINCIPAL
-            name_string: vec![general_string_from(name)],
+            name_string: vec![try_general_string(name).expect("valid principal name")],
         }
     }
 
     /// Create a service principal (e.g., "krbtgt/REALM").
+    ///
+    /// # Panics
+    /// Panics if arguments contain non-printable characters.
     pub fn new_srv_inst(service: &str, instance: &str) -> Self {
         Self {
             name_type: 2, // KRB5_NT_SRV_INST
-            name_string: vec![general_string_from(service), general_string_from(instance)],
+            name_string: vec![
+                try_general_string(service).expect("valid service name"),
+                try_general_string(instance).expect("valid instance name"),
+            ],
         }
     }
 
     /// Create a host-based service principal (e.g., "HTTP/host.example.com").
+    ///
+    /// # Panics
+    /// Panics if arguments contain non-printable characters.
     pub fn new_srv_hst(service: &str, hostname: &str) -> Self {
         Self {
             name_type: 3, // KRB5_NT_SRV_HST
-            name_string: vec![general_string_from(service), general_string_from(hostname)],
+            name_string: vec![
+                try_general_string(service).expect("valid service name"),
+                try_general_string(hostname).expect("valid hostname"),
+            ],
         }
     }
 }
@@ -91,6 +104,11 @@ impl core::str::FromStr for PrincipalName {
             return Err(ParsePrincipalError("empty string".to_string()));
         }
 
+        // Reject multiple @ separators (e.g., "user@REALM@EXTRA")
+        if s.matches('@').count() > 1 {
+            return Err(ParsePrincipalError("multiple '@' separators".to_string()));
+        }
+
         // Strip @REALM suffix if present (realm is handled separately)
         let name_part = s.split('@').next().unwrap_or(s);
 
@@ -100,21 +118,31 @@ impl core::str::FromStr for PrincipalName {
 
         let components: Vec<&str> = name_part.split('/').collect();
 
+        // Reject empty components (e.g., "service/", "/host", "a//b")
+        for comp in &components {
+            if comp.is_empty() {
+                return Err(ParsePrincipalError(
+                    "empty component in principal name".to_string(),
+                ));
+            }
+        }
+
         // Two-component principals use NT_SRV_HST (3), consistent with
         // new_srv_hst(). For krbtgt-style (NT_SRV_INST=2), use new_srv_inst().
         let (name_type, name_string) = match components.len() {
-            1 => (1, vec![general_string_from(components[0])]), // NT_PRINCIPAL
+            1 => (1, vec![try_general_string(components[0])?]), // NT_PRINCIPAL
             2 => (
                 3,
                 vec![
-                    general_string_from(components[0]),
-                    general_string_from(components[1]),
+                    try_general_string(components[0])?,
+                    try_general_string(components[1])?,
                 ],
             ), // NT_SRV_HST
             _ => {
                 // 3+ components — treat as NT_PRINCIPAL with all components
-                let strings = components.iter().map(|c| general_string_from(c)).collect();
-                (1, strings)
+                let strings: Result<Vec<_>, _> =
+                    components.iter().map(|c| try_general_string(c)).collect();
+                (1, strings?)
             }
         };
 
@@ -147,53 +175,93 @@ pub struct EncryptedData {
 
 /// Encryption key (RFC 4120 §5.2.9).
 ///
-/// Key material is zeroized on drop to protect sensitive data in memory.
-/// The key bytes are stored in a `Zeroizing<Vec<u8>>` that guarantees
-/// zeroing on drop, and converted to/from `OctetString` for ASN.1 encoding.
+/// Key material is stored in `Zeroizing<Vec<u8>>` — guaranteed zeroed on drop.
+/// Converted to/from OctetString only during ASN.1 encode/decode via custom impls.
 ///
-/// Construct via `EncryptionKey::new()` and access key bytes via `key_bytes()`.
-#[derive(AsnType, Encode, Decode, Debug, Clone)]
+/// `Debug` is redacted to prevent key leakage in logs/panics.
+#[derive(Clone)]
 pub struct EncryptionKey {
-    #[rasn(tag(explicit(context, 0)))]
+    /// Encryption type identifier.
     pub keytype: i32,
-    #[rasn(tag(explicit(context, 1)))]
-    keyvalue: OctetString,
+    /// Key material — zeroized on drop. Access via `key_bytes()`.
+    key_bytes: Zeroizing<Vec<u8>>,
 }
 
 impl EncryptionKey {
-    /// Create a new encryption key. The key bytes are stored securely
-    /// and zeroized when the key is dropped.
+    /// Create a new encryption key with secure storage.
     pub fn new(keytype: i32, key_bytes: Vec<u8>) -> Self {
         Self {
             keytype,
-            keyvalue: OctetString::from(key_bytes),
+            key_bytes: Zeroizing::new(key_bytes),
         }
     }
 
     /// Access the raw key bytes.
     pub fn key_bytes(&self) -> &[u8] {
-        self.keyvalue.as_ref()
+        &self.key_bytes
     }
 }
 
-impl Drop for EncryptionKey {
-    fn drop(&mut self) {
-        // Zeroize the key material using a mutable copy, then replace.
-        // OctetString is Bytes-backed (immutable), so we extract, zero,
-        // and replace to ensure the original bytes are overwritten.
-        let mut key_copy = self.keyvalue.to_vec();
-        key_copy.zeroize();
-        self.keyvalue = OctetString::from(key_copy);
-        self.keytype = 0;
+impl core::fmt::Debug for EncryptionKey {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("EncryptionKey")
+            .field("keytype", &self.keytype)
+            .field(
+                "keyvalue",
+                &format_args!("<{} bytes redacted>", self.key_bytes.len()),
+            )
+            .finish()
     }
 }
 
 impl Zeroize for EncryptionKey {
     fn zeroize(&mut self) {
-        let mut key_copy = self.keyvalue.to_vec();
-        key_copy.zeroize();
-        self.keyvalue = OctetString::from(key_copy);
-        self.keytype.zeroize();
+        self.key_bytes.zeroize();
+        self.keytype = 0;
+    }
+}
+
+// --- Custom ASN.1 Encode/Decode ---
+// Store key in Zeroizing<Vec<u8>> in memory, serialize as OctetString on wire.
+
+/// Wire format helper (rasn derive handles the ASN.1 tags).
+#[derive(AsnType, Encode, Decode)]
+struct EncryptionKeyWire {
+    #[rasn(tag(explicit(context, 0)))]
+    keytype: i32,
+    #[rasn(tag(explicit(context, 1)))]
+    keyvalue: OctetString,
+}
+
+impl rasn::AsnType for EncryptionKey {
+    const TAG: Tag = Tag::SEQUENCE;
+    const TAG_TREE: TagTree = TagTree::Leaf(Tag::SEQUENCE);
+}
+
+impl rasn::Encode for EncryptionKey {
+    fn encode_with_tag_and_constraints<'b, E: rasn::Encoder<'b>>(
+        &self,
+        encoder: &mut E,
+        tag: Tag,
+        constraints: Constraints,
+        identifier: Identifier,
+    ) -> Result<(), E::Error> {
+        let wire = EncryptionKeyWire {
+            keytype: self.keytype,
+            keyvalue: OctetString::from((*self.key_bytes).clone()),
+        };
+        wire.encode_with_tag_and_constraints(encoder, tag, constraints, identifier)
+    }
+}
+
+impl rasn::Decode for EncryptionKey {
+    fn decode_with_tag_and_constraints<D: rasn::Decoder>(
+        decoder: &mut D,
+        tag: Tag,
+        constraints: Constraints,
+    ) -> Result<Self, D::Error> {
+        let wire = EncryptionKeyWire::decode_with_tag_and_constraints(decoder, tag, constraints)?;
+        Ok(EncryptionKey::new(wire.keytype, wire.keyvalue.to_vec()))
     }
 }
 

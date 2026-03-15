@@ -21,7 +21,7 @@ pub struct KdcReqBody {
     #[rasn(tag(explicit(context, 4)))]
     pub from: Option<KerberosTime>,
     #[rasn(tag(explicit(context, 5)))]
-    pub till: Option<KerberosTime>,
+    pub till: KerberosTime,
     #[rasn(tag(explicit(context, 6)))]
     pub rtime: Option<KerberosTime>,
     #[rasn(tag(explicit(context, 7)))]

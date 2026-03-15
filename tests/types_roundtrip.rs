@@ -233,7 +233,7 @@ fn test_kdc_req_body_roundtrip() {
         realm: make_realm(),
         sname: Some(make_srv_principal()),
         from: None,
-        till: Some(make_time()),
+        till: make_time(),
         rtime: None,
         nonce: 12345678,
         etype: vec![18, 17],
@@ -256,7 +256,7 @@ fn test_as_req_roundtrip() {
             realm: make_realm(),
             sname: Some(make_srv_principal()),
             from: None,
-            till: Some(make_time()),
+            till: make_time(),
             rtime: None,
             nonce: 42,
             etype: vec![18, 17],
@@ -280,7 +280,7 @@ fn test_as_req_application_tag() {
             realm: make_realm(),
             sname: Some(make_srv_principal()),
             from: None,
-            till: Some(make_time()),
+            till: make_time(),
             rtime: None,
             nonce: 42,
             etype: vec![18],
@@ -309,7 +309,7 @@ fn test_tgs_req_application_tag() {
             realm: make_realm(),
             sname: Some(PrincipalName::new_srv_hst("HTTP", "web.example.com")),
             from: None,
-            till: Some(make_time()),
+            till: make_time(),
             rtime: None,
             nonce: 99,
             etype: vec![18],
@@ -705,6 +705,30 @@ fn test_principal_from_str_empty() {
 #[test]
 fn test_principal_from_str_at_only() {
     let result = "@REALM".parse::<PrincipalName>();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_principal_from_str_multiple_at() {
+    let result = "user@REALM@EXTRA".parse::<PrincipalName>();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_principal_from_str_trailing_slash() {
+    let result = "service/".parse::<PrincipalName>();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_principal_from_str_leading_slash() {
+    let result = "/host".parse::<PrincipalName>();
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_principal_from_str_double_slash() {
+    let result = "a//b".parse::<PrincipalName>();
     assert!(result.is_err());
 }
 
