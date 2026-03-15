@@ -684,7 +684,11 @@ fn test_encryption_key_debug_redacted() {
     );
     assert!(
         !debug_output.contains("\\xaa"),
-        "Debug output must not contain raw key bytes"
+        "Debug output must not contain escaped hex key bytes"
+    );
+    assert!(
+        !debug_output.to_lowercase().contains("0xaa"),
+        "Debug output must not contain hex key bytes"
     );
 }
 
