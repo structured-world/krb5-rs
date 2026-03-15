@@ -33,6 +33,9 @@ jobs:
     # (which bumps the version) has been merged.
     needs: release-pr
     runs-on: ubuntu-latest
+    concurrency:
+      group: release
+      cancel-in-progress: false
     permissions:
       contents: write
     steps:
