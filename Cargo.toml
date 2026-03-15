@@ -45,5 +45,5 @@ version = "0.16"
 optional = true
 
 [dependencies.rcgen]
-version = "0.13"
+version = "0.14"
 optional = true
