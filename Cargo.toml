@@ -41,7 +41,7 @@ pkinit = ["dep:x509-parser", "dep:rcgen"]  # PKINIT (X.509 + Kerberos)
 fast = []              # FAST pre-authentication tunneling
 
 [dependencies.x509-parser]
-version = "0.16"
+version = "0.18"
 optional = true
 
 [dependencies.rcgen]
