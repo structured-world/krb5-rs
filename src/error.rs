@@ -7,16 +7,12 @@ use crate::types::KrbErrorMsg;
 /// Errors that can occur during Kerberos operations.
 #[derive(Debug, thiserror::Error)]
 pub enum Krb5Error {
-    /// KDC returned a protocol error.
-    #[error("KDC error {code}: {message}")]
-    KdcError {
-        /// Kerberos error code (RFC 4120 §7.5.9).
-        code: i32,
-        /// Human-readable message.
-        message: String,
-        /// Raw KRB-ERROR message for advanced error handling.
-        error_msg: Box<KrbErrorMsg>,
-    },
+    /// KDC returned a protocol error (KRB-ERROR message).
+    ///
+    /// Use `.error_code()` and `.e_text()` for quick access,
+    /// or match the inner `KrbErrorMsg` for full details.
+    #[error("KDC error {}: {}", .0.error_code, .0.e_text.as_ref().map_or("(no message)", |s| core::str::from_utf8(s.as_ref()).unwrap_or("(invalid utf8)")))]
+    KdcError(Box<KrbErrorMsg>),
 
     /// AS-REP/TGS-REP validation failed.
     #[error("reply validation failed: {0}")]
@@ -71,4 +67,11 @@ pub enum Krb5Error {
     /// Network/transport error.
     #[error("transport error: {0}")]
     Transport(#[from] std::io::Error),
+}
+
+impl Krb5Error {
+    /// Create a KDC error from a KRB-ERROR message.
+    pub fn from_error_msg(msg: KrbErrorMsg) -> Self {
+        Self::KdcError(Box::new(msg))
+    }
 }
