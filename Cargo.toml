@@ -1,0 +1,49 @@
+[package]
+name = "krb5-rs"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+license = "Apache-2.0"
+description = "Pure Rust Kerberos V5: GSSAPI, SPNEGO, PKINIT. No C FFI, no system krb5 dependency."
+repository = "https://github.com/structured-world/krb5-rs"
+homepage = "https://github.com/structured-world/krb5-rs"
+documentation = "https://docs.rs/krb5-rs"
+keywords = ["kerberos", "gssapi", "spnego", "active-directory", "authentication"]
+categories = ["authentication", "cryptography", "network-programming"]
+readme = "README.md"
+
+[dependencies]
+# ASN.1 DER encoding/decoding
+rasn = "0.22"
+rasn-kerberos = "0.16"
+
+# Crypto
+aes = "0.8"
+hmac = "0.12"
+sha2 = "0.10"
+md5 = "0.7"            # Legacy RC4-HMAC support
+rand = "0.8"
+
+# Network
+tokio = { version = "1", features = ["net", "io-util", "time"] }
+
+# Error handling
+thiserror = "2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+[features]
+default = ["client", "gssapi"]
+client = []            # Kerberos client (TGT/TGS request)
+gssapi = []            # GSSAPI/SPNEGO mechanism
+pkinit = ["dep:x509-parser", "dep:rcgen"]  # PKINIT (X.509 + Kerberos)
+fast = []              # FAST pre-authentication tunneling
+
+[dependencies.x509-parser]
+version = "0.16"
+optional = true
+
+[dependencies.rcgen]
+version = "0.13"
+optional = true

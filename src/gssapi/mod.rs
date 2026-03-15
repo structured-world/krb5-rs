@@ -1,0 +1,1 @@
+//! GSSAPI/SPNEGO mechanism.
