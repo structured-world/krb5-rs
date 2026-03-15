@@ -92,6 +92,8 @@ impl<T: Flags> Default for KerberosFlags<T> {
 
 // --- rasn ASN.1 implementation (BIT STRING on the wire) ---
 
+// TAG + IDENTIFIER follow the same pattern as rasn's own BitString impl
+// (see rasn-0.28 types/strings/bit.rs). TAG_TREE has a default based on TAG.
 impl<T: Flags> AsnType for KerberosFlags<T> {
     const TAG: Tag = Tag::BIT_STRING;
     const IDENTIFIER: Identifier = Identifier::BIT_STRING;
