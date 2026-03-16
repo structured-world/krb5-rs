@@ -54,6 +54,8 @@ fn main() {
     }
 }
 
+// Duplicates kdc_send() in tests/as_exchange_integration.rs — kept separate
+// because examples and integration tests have independent compilation units.
 fn tcp_send(addr: &str, data: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut stream = TcpStream::connect(addr)?;
     stream.set_nodelay(true)?;

@@ -6,7 +6,8 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Allow overriding credentials via env vars (avoids hardcoded secrets in ps output)
+# Allow overriding credentials via env vars so secrets don't appear in ps output.
+# The default values below are for local testing only and MUST NOT be reused outside tests.
 MASTER_KEY="${KDC_MASTER_KEY:-masterkey}"
 TESTUSER1_PASSWORD="${KDC_TESTUSER1_PASSWORD:-testpassword}"
 TESTUSER2_PASSWORD="${KDC_TESTUSER2_PASSWORD:-password2}"
