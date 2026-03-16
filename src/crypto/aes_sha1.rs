@@ -21,9 +21,15 @@ pub struct Aes128CtsHmacSha196;
 /// AES-256-CTS-HMAC-SHA1-96 (etype 18).
 pub struct Aes256CtsHmacSha196;
 
-// Shared implementation parameterized by key size
-fn aes_encrypt(key: &[u8], key_usage: i32, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    validate_aes_key_len(key)?;
+// Shared implementation parameterized by key size.
+// `expected_key_len` enforces that the key matches the profile (16 for AES-128, 32 for AES-256).
+fn aes_encrypt(
+    key: &[u8],
+    key_usage: i32,
+    plaintext: &[u8],
+    expected_key_len: usize,
+) -> Result<Vec<u8>, CryptoError> {
+    validate_exact_key_len(key, expected_key_len)?;
     let ke = derive_key(key, key_usage, 0xAA)?;
     let ki = derive_key(key, key_usage, 0x55)?;
 
@@ -38,8 +44,13 @@ fn aes_encrypt(key: &[u8], key_usage: i32, plaintext: &[u8]) -> Result<Vec<u8>, 
     Ok(ct)
 }
 
-fn aes_decrypt(key: &[u8], key_usage: i32, ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    validate_aes_key_len(key)?;
+fn aes_decrypt(
+    key: &[u8],
+    key_usage: i32,
+    ciphertext: &[u8],
+    expected_key_len: usize,
+) -> Result<Vec<u8>, CryptoError> {
+    validate_exact_key_len(key, expected_key_len)?;
     let ke = derive_key(key, key_usage, 0xAA)?;
     let ki = derive_key(key, key_usage, 0x55)?;
 
@@ -90,16 +101,22 @@ fn aes_string_to_key(
     Ok(Zeroizing::new(derived))
 }
 
-/// Reject keys that are neither 16 nor 32 bytes (AES-128 or AES-256).
-fn validate_aes_key_len(key: &[u8]) -> Result<(), CryptoError> {
-    match key.len() {
-        16 | 32 => Ok(()),
-        _ => Err(CryptoError::BadKeySize),
+/// Strictly enforce that `key.len()` matches the expected length for a profile.
+fn validate_exact_key_len(key: &[u8], expected: usize) -> Result<(), CryptoError> {
+    if key.len() == expected {
+        Ok(())
+    } else {
+        Err(CryptoError::BadKeySize)
     }
 }
 
-fn aes_checksum(key: &[u8], key_usage: i32, data: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    validate_aes_key_len(key)?;
+fn aes_checksum(
+    key: &[u8],
+    key_usage: i32,
+    data: &[u8],
+    expected_key_len: usize,
+) -> Result<Vec<u8>, CryptoError> {
+    validate_exact_key_len(key, expected_key_len)?;
     let kc = derive_key(key, key_usage, 0x99)?;
     Ok(hmac_sha1_96(&kc, data))
 }
@@ -137,7 +154,7 @@ impl EtypeProfile for Aes128CtsHmacSha196 {
         key_usage: i32,
         plaintext: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
-        aes_encrypt(key, key_usage, plaintext)
+        aes_encrypt(key, key_usage, plaintext, self.key_length())
     }
 
     fn decrypt(
@@ -146,7 +163,7 @@ impl EtypeProfile for Aes128CtsHmacSha196 {
         key_usage: i32,
         ciphertext: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
-        aes_decrypt(key, key_usage, ciphertext)
+        aes_decrypt(key, key_usage, ciphertext, self.key_length())
     }
 
     fn string_to_key(
@@ -159,7 +176,7 @@ impl EtypeProfile for Aes128CtsHmacSha196 {
     }
 
     fn checksum(&self, key: &[u8], key_usage: i32, data: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        aes_checksum(key, key_usage, data)
+        aes_checksum(key, key_usage, data, self.key_length())
     }
 
     fn random_to_key(&self, random: &[u8]) -> Result<Zeroizing<Vec<u8>>, CryptoError> {
@@ -193,7 +210,7 @@ impl EtypeProfile for Aes256CtsHmacSha196 {
         key_usage: i32,
         plaintext: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
-        aes_encrypt(key, key_usage, plaintext)
+        aes_encrypt(key, key_usage, plaintext, self.key_length())
     }
 
     fn decrypt(
@@ -202,7 +219,7 @@ impl EtypeProfile for Aes256CtsHmacSha196 {
         key_usage: i32,
         ciphertext: &[u8],
     ) -> Result<Vec<u8>, CryptoError> {
-        aes_decrypt(key, key_usage, ciphertext)
+        aes_decrypt(key, key_usage, ciphertext, self.key_length())
     }
 
     fn string_to_key(
@@ -215,7 +232,7 @@ impl EtypeProfile for Aes256CtsHmacSha196 {
     }
 
     fn checksum(&self, key: &[u8], key_usage: i32, data: &[u8]) -> Result<Vec<u8>, CryptoError> {
-        aes_checksum(key, key_usage, data)
+        aes_checksum(key, key_usage, data, self.key_length())
     }
 
     fn random_to_key(&self, random: &[u8]) -> Result<Zeroizing<Vec<u8>>, CryptoError> {
@@ -527,15 +544,27 @@ mod tests {
     // Key length validation
     #[test]
     fn test_encrypt_wrong_key_length_rejected() {
-        let etype = Aes128CtsHmacSha196;
+        let etype128 = Aes128CtsHmacSha196;
+        let etype256 = Aes256CtsHmacSha196;
+
         // 24-byte key: neither AES-128 nor AES-256
         let bad_key = [0x42u8; 24];
         assert!(matches!(
-            etype.encrypt(&bad_key, 1, b"data"),
+            etype128.encrypt(&bad_key, 1, b"data"),
             Err(CryptoError::BadKeySize)
         ));
+
+        // 32-byte key with AES-128 profile: must be rejected
+        let aes256_key = [0x42u8; 32];
         assert!(matches!(
-            etype.checksum(&bad_key, 1, b"data"),
+            etype128.encrypt(&aes256_key, 1, b"data"),
+            Err(CryptoError::BadKeySize)
+        ));
+
+        // 16-byte key with AES-256 profile: must be rejected
+        let aes128_key = [0x42u8; 16];
+        assert!(matches!(
+            etype256.encrypt(&aes128_key, 1, b"data"),
             Err(CryptoError::BadKeySize)
         ));
     }
