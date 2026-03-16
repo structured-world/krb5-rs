@@ -6,6 +6,11 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
+# Allow overriding credentials via env vars (avoids hardcoded secrets in ps output)
+MASTER_KEY="${KDC_MASTER_KEY:-masterkey}"
+TESTUSER1_PASSWORD="${KDC_TESTUSER1_PASSWORD:-testpassword}"
+TESTUSER2_PASSWORD="${KDC_TESTUSER2_PASSWORD:-password2}"
+
 # Install MIT KDC (krb5.conf must not be bind-mounted during install
 # because krb5-config postinst tries to rename it)
 apt-get update -qq
@@ -43,11 +48,11 @@ CONF
 
 # Create KDC database
 mkdir -p /var/lib/krb5kdc
-kdb5_util create -s -P masterkey -r TEST.REALM
+printf '%s\n' "$MASTER_KEY" | kdb5_util create -s -r TEST.REALM -W
 
 # Create test principals
-kadmin.local -q "addprinc -pw testpassword testuser@TEST.REALM"
-kadmin.local -q "addprinc -pw password2 testuser2@TEST.REALM"
+kadmin.local -q "addprinc -pw ${TESTUSER1_PASSWORD} testuser@TEST.REALM"
+kadmin.local -q "addprinc -pw ${TESTUSER2_PASSWORD} testuser2@TEST.REALM"
 kadmin.local -q "addprinc -randkey HTTP/server.test.realm@TEST.REALM"
 
 echo "KDC initialized. Starting..."

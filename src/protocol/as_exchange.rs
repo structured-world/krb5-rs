@@ -288,6 +288,8 @@ impl AsExchange {
                         // Clear cached preauth state — salt/s2kparams are realm-specific
                         self.last_preauth_salt = None;
                         self.last_s2kparams = None;
+                        // Reset preauth loop counter for the new realm
+                        self.loop_count = 0;
                         // Restart: build a new initial AS-REQ for the new realm
                         let (as_req_der, req_body) = self.build_as_req(None)?;
                         self.last_req_body = Some(req_body);
