@@ -17,7 +17,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
-use krb5_rs::protocol::{AsExchange, AsExchangeConfig, StepResult};
+use krb5_rs::protocol::{AsExchange, AsExchangeConfig, ErrorCode, StepResult};
 use krb5_rs::types::PrincipalName;
 use krb5_rs::Krb5Error;
 
@@ -120,7 +120,11 @@ fn test_wrong_password_fails() {
     match result {
         Err(Krb5Error::DecryptionFailed) => {} // Client-side decryption failure
         Err(Krb5Error::KdcError(err)) => {
-            assert_eq!(err.error_code, 24, "expected PREAUTH_FAILED (24)");
+            assert_eq!(
+                err.error_code,
+                ErrorCode::PreauthFailed as i32,
+                "expected PREAUTH_FAILED"
+            );
         }
         Err(other) => panic!("unexpected error: {other}"),
         Ok(()) => panic!("should have failed with wrong password"),
@@ -138,8 +142,9 @@ fn test_unknown_principal_fails() {
     match result {
         Err(Krb5Error::KdcError(err)) => {
             assert_eq!(
-                err.error_code, 6,
-                "expected C_PRINCIPAL_UNKNOWN (6), got {}",
+                err.error_code,
+                ErrorCode::CPrincipalUnknown as i32,
+                "expected C_PRINCIPAL_UNKNOWN, got {}",
                 err.error_code
             );
         }

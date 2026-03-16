@@ -329,8 +329,8 @@ impl AsExchange {
         let till = match now.checked_add_signed(till_dur) {
             Some(t) => t,
             None => {
-                return Err(Krb5Error::Crypto(
-                    "ticket lifetime overflow when computing till".to_string(),
+                return Err(Krb5Error::ReplyValidation(
+                    "ticket lifetime overflow when computing till",
                 ))
             }
         };
@@ -341,8 +341,8 @@ impl AsExchange {
             match now.checked_add_signed(rtime_dur) {
                 Some(t) => Some(t),
                 None => {
-                    return Err(Krb5Error::Crypto(
-                        "ticket lifetime overflow when computing rtime".to_string(),
+                    return Err(Krb5Error::ReplyValidation(
+                        "ticket lifetime overflow when computing rtime",
                     ))
                 }
             }

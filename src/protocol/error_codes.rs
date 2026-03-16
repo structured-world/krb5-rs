@@ -289,7 +289,7 @@ impl ErrorCode {
             Self::CertificateRevoked => "Certificate revoked",
             Self::CertificateMismatch => "Key/certificate not within etype",
             Self::WrongRealm => "Wrong realm",
-            Self::UserToUserRequired => "User to user required",
+            Self::UserToUserRequired => "User-to-user authentication required",
             Self::CantVerifyCertificate => "Can't verify certificate",
             Self::InvalidCertificate => "Invalid certificate",
             Self::RevokedCertificate => "Revoked certificate",
