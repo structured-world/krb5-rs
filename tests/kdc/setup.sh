@@ -48,7 +48,8 @@ CONF
 
 # Create KDC database
 mkdir -p /var/lib/krb5kdc
-printf '%s\n' "$MASTER_KEY" | kdb5_util create -s -r TEST.REALM -W
+# -W reads password from stdin; kdb5_util prompts twice (enter + verify)
+printf '%s\n%s\n' "$MASTER_KEY" "$MASTER_KEY" | kdb5_util create -s -r TEST.REALM -W
 
 # Create test principals
 printf '%s\n%s\n' "$TESTUSER1_PASSWORD" "$TESTUSER1_PASSWORD" | \
