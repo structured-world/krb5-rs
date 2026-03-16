@@ -498,9 +498,12 @@ impl AsExchange {
                                     return (s, s2kparams);
                                 }
                                 // Salt absent in AS-REP entry but s2kparams present:
-                                // fall through to use persisted/default salt with these s2kparams
+                                // use persisted preauth salt or default
                                 if s2kparams.is_some() {
-                                    let fallback_salt = self.default_salt();
+                                    let fallback_salt = self
+                                        .last_preauth_salt
+                                        .clone()
+                                        .unwrap_or_else(|| self.default_salt());
                                     return (fallback_salt, s2kparams);
                                 }
                             }

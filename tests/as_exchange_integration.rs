@@ -55,9 +55,10 @@ fn kdc_send(data: &[u8]) -> std::io::Result<Vec<u8>> {
 }
 
 /// Drive the AS exchange state machine to completion using TCP transport.
+/// Caps at 32 steps to avoid runaway loops in tests.
 fn drive_exchange(exchange: &mut AsExchange) -> Result<(), Krb5Error> {
     let mut kdc_reply = Vec::new();
-    loop {
+    for _ in 0..32 {
         match exchange.step(&kdc_reply)? {
             StepResult::SendToKdc { data, .. } | StepResult::RetryTcp { data, .. } => {
                 kdc_reply = kdc_send(&data).map_err(Krb5Error::Transport)?;
@@ -65,6 +66,9 @@ fn drive_exchange(exchange: &mut AsExchange) -> Result<(), Krb5Error> {
             StepResult::Complete => return Ok(()),
         }
     }
+    Err(Krb5Error::ReplyValidation(
+        "exchange did not complete within step limit",
+    ))
 }
 
 /// Test: acquire TGT with correct password via the two-round AS exchange.

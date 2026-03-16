@@ -58,24 +58,26 @@ pub enum ErrorCode {
     PreauthFailed = 24,
     /// Additional pre-authentication required.
     PreauthRequired = 25,
-    /// Server principal valid for user-to-user only.
-    ServerMustUseUser2User = 26,
+    /// Server not found for requested principal.
+    ServerNomatch = 26,
+    /// Must use user-to-user authentication.
+    MustUseUser2User = 27,
     /// KDC policy rejects transited path.
-    PathNotAccepted = 27,
-    /// A service is not available (SVC_UNAVAILABLE).
+    PathNotAccepted = 28,
+    /// A service is not available.
     SvcUnavailable = 29,
-    /// Inappropriate type of checksum in PDU.
+    /// Integrity check on decrypted field failed.
     BadIntegrity = 31,
     /// Ticket expired.
     TktExpired = 32,
-    /// Key version is not available.
-    KeyTooOld = 33,
-    /// Cannot find TGT for requested realm.
-    CantGetTgt = 34,
-    /// Ticket is not yet valid.
-    TktNotYetValid = 35,
+    /// Ticket not yet valid.
+    TktNotYetValid = 33,
     /// Request is a replay.
-    Repeat = 36,
+    Repeat = 34,
+    /// The ticket isn't for us.
+    NotUs = 35,
+    /// Ticket and authenticator don't match.
+    Badmatch = 36,
     /// Clock skew too great.
     Skew = 37,
     /// Incorrect net address.
@@ -174,15 +176,16 @@ impl ErrorCode {
             23 => Some(Self::KeyExpired),
             24 => Some(Self::PreauthFailed),
             25 => Some(Self::PreauthRequired),
-            26 => Some(Self::ServerMustUseUser2User),
-            27 => Some(Self::PathNotAccepted),
+            26 => Some(Self::ServerNomatch),
+            27 => Some(Self::MustUseUser2User),
+            28 => Some(Self::PathNotAccepted),
             29 => Some(Self::SvcUnavailable),
             31 => Some(Self::BadIntegrity),
             32 => Some(Self::TktExpired),
-            33 => Some(Self::KeyTooOld),
-            34 => Some(Self::CantGetTgt),
-            35 => Some(Self::TktNotYetValid),
-            36 => Some(Self::Repeat),
+            33 => Some(Self::TktNotYetValid),
+            34 => Some(Self::Repeat),
+            35 => Some(Self::NotUs),
+            36 => Some(Self::Badmatch),
             37 => Some(Self::Skew),
             38 => Some(Self::Badaddr),
             39 => Some(Self::Badversion),
@@ -248,15 +251,16 @@ impl ErrorCode {
             Self::KeyExpired => "Password has expired",
             Self::PreauthFailed => "Pre-authentication information was invalid",
             Self::PreauthRequired => "Additional pre-authentication required",
-            Self::ServerMustUseUser2User => "Server principal valid for user-to-user only",
+            Self::ServerNomatch => "Server not found for requested principal",
+            Self::MustUseUser2User => "Must use user-to-user authentication",
             Self::PathNotAccepted => "KDC policy rejects transited path",
             Self::SvcUnavailable => "A service is not available",
-            Self::BadIntegrity => "Inappropriate type of checksum in PDU",
+            Self::BadIntegrity => "Integrity check on decrypted field failed",
             Self::TktExpired => "Ticket expired",
-            Self::KeyTooOld => "Key version is not available",
-            Self::CantGetTgt => "Cannot find TGT for requested realm",
-            Self::TktNotYetValid => "Ticket is not yet valid",
+            Self::TktNotYetValid => "Ticket not yet valid",
             Self::Repeat => "Request is a replay",
+            Self::NotUs => "The ticket isn't for us",
+            Self::Badmatch => "Ticket and authenticator don't match",
             Self::Skew => "Clock skew too great",
             Self::Badaddr => "Incorrect net address",
             Self::Badversion => "Protocol version mismatch",
@@ -316,8 +320,8 @@ mod tests {
         // Verify every enum variant round-trips through from_i32
         let all_codes: &[i32] = &[
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 26, 27, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
-            48, 49, 50, 52, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
+            24, 25, 26, 27, 28, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46,
+            47, 48, 49, 50, 52, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
         ];
         for &code in all_codes {
             assert!(
@@ -330,8 +334,7 @@ mod tests {
     #[test]
     fn test_from_i32_unknown_code() {
         assert_eq!(ErrorCode::from_i32(999), None);
-        assert_eq!(ErrorCode::from_i32(28), None); // gap: 28 not defined in RFC 4120
-        assert_eq!(ErrorCode::from_i32(30), None); // gap: 30 not defined
+        assert_eq!(ErrorCode::from_i32(30), None); // gap: 30 not defined in RFC 4120
         assert_eq!(ErrorCode::from_i32(51), None); // gap between 50 and 52
         assert_eq!(ErrorCode::from_i32(53), None); // gap between 52 and 60
     }
