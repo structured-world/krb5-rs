@@ -28,8 +28,7 @@ fn main() {
         round += 1;
         match exchange.step(&kdc_reply) {
             Ok(
-                StepResult::SendToKdc { data, realm: r }
-                | StepResult::RetryTcp { data, realm: r },
+                StepResult::SendToKdc { data, realm: r } | StepResult::RetryTcp { data, realm: r },
             ) => {
                 println!("Round {round}: sending {} bytes to {r}", data.len());
                 kdc_reply = tcp_send(&kdc_addr, &data).expect("TCP send failed");
