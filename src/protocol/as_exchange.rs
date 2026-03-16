@@ -250,6 +250,11 @@ impl AsExchange {
 
         // Try to decode as KRB-ERROR
         let krb_error: KrbErrorMsg = rasn::der::decode(kdc_reply)?;
+        if krb_error.pvno != 5 || krb_error.msg_type != 30 {
+            return Err(Krb5Error::ReplyValidation(
+                "invalid KRB-ERROR pvno/msg_type",
+            ));
+        }
 
         match krb_error.error_code {
             KDC_ERR_PREAUTH_REQUIRED => {
