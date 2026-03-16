@@ -147,6 +147,9 @@ impl EtypeProfile for Aes128CtsHmacSha196 {
     fn checksum_size(&self) -> usize {
         HMAC_TRAILER
     }
+    fn checksum_type(&self) -> i32 {
+        15 // hmac-sha1-96-aes128
+    }
 
     fn encrypt(
         &self,
@@ -202,6 +205,9 @@ impl EtypeProfile for Aes256CtsHmacSha196 {
     }
     fn checksum_size(&self) -> usize {
         HMAC_TRAILER
+    }
+    fn checksum_type(&self) -> i32 {
+        16 // hmac-sha1-96-aes256
     }
 
     fn encrypt(

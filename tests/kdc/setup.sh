@@ -28,6 +28,12 @@ cat > /etc/krb5.conf <<'CONF'
         kdc = 127.0.0.1:88
         admin_server = 127.0.0.1:749
     }
+    OTHER.REALM = {
+        kdc = kdc-other:88
+    }
+[domain_realm]
+    .other.realm = OTHER.REALM
+    other.realm = OTHER.REALM
 CONF
 
 cat > /etc/krb5kdc/kdc.conf <<'CONF'
@@ -58,6 +64,16 @@ printf '%s\n%s\n' "$TESTUSER1_PASSWORD" "$TESTUSER1_PASSWORD" | \
 printf '%s\n%s\n' "$TESTUSER2_PASSWORD" "$TESTUSER2_PASSWORD" | \
     kadmin.local -q "addprinc testuser2@TEST.REALM"
 kadmin.local -q "addprinc -randkey HTTP/server.test.realm@TEST.REALM"
+
+# Cross-realm trust principals (must match OTHER.REALM's trust keys).
+# Clear REQUIRES_PRE_AUTH — service-to-service trust doesn't use preauth.
+TRUST_PASSWORD="${KDC_TRUST_PASSWORD:-crosstrust}"
+printf '%s\n%s\n' "$TRUST_PASSWORD" "$TRUST_PASSWORD" | \
+    kadmin.local -q "addprinc krbtgt/OTHER.REALM@TEST.REALM"
+kadmin.local -q "modprinc -requires_preauth krbtgt/OTHER.REALM@TEST.REALM"
+printf '%s\n%s\n' "$TRUST_PASSWORD" "$TRUST_PASSWORD" | \
+    kadmin.local -q "addprinc krbtgt/TEST.REALM@OTHER.REALM"
+kadmin.local -q "modprinc -requires_preauth krbtgt/TEST.REALM@OTHER.REALM"
 
 echo "KDC initialized. Starting..."
 

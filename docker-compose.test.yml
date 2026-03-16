@@ -13,3 +13,18 @@ services:
       interval: 2s
       timeout: 5s
       retries: 15
+
+  kdc-other:
+    image: ubuntu:24.04
+    hostname: kdc.other.realm
+    ports:
+      - "10288:88/udp"
+      - "10288:88/tcp"
+    volumes:
+      - ./tests/kdc/setup-other.sh:/setup.sh:ro
+    command: ["/bin/bash", "/setup.sh"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo >/dev/tcp/127.0.0.1/88"]
+      interval: 2s
+      timeout: 5s
+      retries: 15

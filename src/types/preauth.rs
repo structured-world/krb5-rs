@@ -29,6 +29,16 @@ pub struct PaPacRequest {
     pub include_pac: bool,
 }
 
+/// PA-PAC-OPTIONS (MS-KILE §2.2.10).
+///
+/// Sent in TGS-REQ padata to request PAC-related options.
+/// The `flags` field uses KerberosFlags encoding (BIT STRING).
+#[derive(AsnType, Encode, Decode, Debug, Clone)]
+pub struct PaPacOptions {
+    #[rasn(tag(explicit(context, 0)))]
+    pub flags: BitString,
+}
+
 /// ETYPE-INFO entry (legacy, RFC 4120 §5.2.7.4).
 #[derive(AsnType, Encode, Decode, Debug, Clone)]
 pub struct EtypeInfoEntry {
