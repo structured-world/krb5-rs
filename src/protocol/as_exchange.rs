@@ -110,6 +110,9 @@ impl AsExchangeConfig {
 
 /// Result of a single `step()` call.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
+// Large variants are acceptable: returned by value at step boundaries,
+// not stored in collections. The Vec<u8>+String shape is inherent to the API.
 pub enum StepResult {
     /// Send this DER-encoded message to the KDC for the given realm.
     SendToKdc {
