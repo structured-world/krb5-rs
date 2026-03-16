@@ -1,5 +1,8 @@
 #!/bin/bash
-set -ex
+set -euo pipefail
+if [[ "${DEBUG_KDC_SETUP:-0}" == "1" ]]; then
+    set -x
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 

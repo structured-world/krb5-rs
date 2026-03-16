@@ -44,7 +44,10 @@ pub struct AsExchangeConfig {
     pub kdc_options: KerberosFlags<KdcOptions>,
     /// Requested ticket lifetime. Default: 10 hours.
     pub tkt_lifetime: Duration,
-    /// Requested renewable lifetime. Default: 7 days. Set to zero for non-renewable.
+    /// Requested renewable lifetime. Default: 7 days.
+    ///
+    /// Renewability is controlled by the `KdcOptions::RENEWABLE` flag in
+    /// `kdc_options`. To request a non-renewable ticket, clear that flag.
     pub renew_lifetime: Duration,
     /// Whether to request PAC inclusion (for AD environments). Default: true.
     pub request_pac: bool,
@@ -79,12 +82,14 @@ impl AsExchangeConfig {
         }
     }
 
-    /// Create a config without PA-PAC-REQUEST (for non-AD environments).
+    /// Create a config that sends `PA-PAC-REQUEST { include-pac: false }`.
+    ///
+    /// Use this for non-AD environments where PAC is not needed.
     pub fn new_no_pac(client: PrincipalName, realm: impl Into<String>) -> Self {
         Self {
             client,
             realm: realm.into(),
-            request_pac: true,
+            request_pac: false,
             ..Default::default()
         }
     }
@@ -334,10 +339,8 @@ impl AsExchange {
             padata.extend(pa_list);
         }
 
-        // Add PA-PAC-REQUEST if configured
-        if self.config.request_pac {
-            padata.push(build_pa_pac_request(true)?);
-        }
+        // Always send PA-PAC-REQUEST; `request_pac` controls `include-pac` value
+        padata.push(build_pa_pac_request(self.config.request_pac)?);
 
         let padata_opt = if padata.is_empty() {
             None
@@ -360,8 +363,13 @@ impl AsExchange {
 
     /// Build PA-ENC-TIMESTAMP and return as padata vec.
     fn build_preauth_padata(&self, hint: &PreauthHint) -> Result<Vec<PaData>, Krb5Error> {
-        let now = now_kerberos();
-        let usec = Utc::now().timestamp_subsec_micros() as i32;
+        // Capture a single instant for both timestamp and microseconds
+        let now_utc = Utc::now();
+        let now = now_utc
+            .with_nanosecond(0)
+            .expect("truncating ns")
+            .with_timezone(&FixedOffset::east_opt(0).expect("UTC"));
+        let usec = now_utc.timestamp_subsec_micros() as i32;
 
         // Compute salt: use hint salt, or compute default
         let salt = if hint.salt.is_empty() {
@@ -528,6 +536,13 @@ mod tests {
         assert!(config.request_pac);
         assert_eq!(config.tkt_lifetime, Duration::from_secs(36000));
         assert_eq!(config.renew_lifetime, Duration::from_secs(604800));
+    }
+
+    #[test]
+    fn test_config_no_pac() {
+        let config =
+            AsExchangeConfig::new_no_pac(PrincipalName::new_principal("user"), "EXAMPLE.COM");
+        assert!(!config.request_pac);
     }
 
     #[test]

@@ -9,7 +9,7 @@ services:
       - ./tests/kdc/setup.sh:/setup.sh:ro
     command: ["/bin/bash", "/setup.sh"]
     healthcheck:
-      test: ["CMD", "bash", "-c", "echo | nc -u -w1 127.0.0.1 88"]
+      test: ["CMD", "bash", "-c", "echo >/dev/tcp/127.0.0.1/88"]
       interval: 2s
       timeout: 5s
       retries: 15
