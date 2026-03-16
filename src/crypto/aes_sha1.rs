@@ -675,10 +675,20 @@ mod tests {
         let e17 = find_etype(17).expect("etype 17");
         assert_eq!(e17.etype(), 17);
         assert_eq!(e17.key_length(), 16);
+        assert_eq!(
+            e17.checksum_type(),
+            15,
+            "AES-128 mandatory checksum = hmac-sha1-96-aes128"
+        );
 
         let e18 = find_etype(18).expect("etype 18");
         assert_eq!(e18.etype(), 18);
         assert_eq!(e18.key_length(), 32);
+        assert_eq!(
+            e18.checksum_type(),
+            16,
+            "AES-256 mandatory checksum = hmac-sha1-96-aes256"
+        );
 
         assert!(matches!(find_etype(23), Err(CryptoError::UnsupportedEtype)));
     }

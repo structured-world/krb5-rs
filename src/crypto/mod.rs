@@ -103,6 +103,9 @@ pub trait EtypeProfile: Send + Sync {
     ///
     /// For AES128: `hmac-sha1-96-aes128` (15).
     /// For AES256: `hmac-sha1-96-aes256` (16).
+    ///
+    /// Required method (no default) — every etype MUST define its checksum type.
+    /// Crate is pre-1.0; no downstream implementors exist.
     fn checksum_type(&self) -> i32;
 
     /// Encrypt plaintext with the given key and key usage number.

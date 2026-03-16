@@ -19,6 +19,7 @@ use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::time::Duration;
 
+use krb5_rs::protocol::ErrorCode;
 use krb5_rs::protocol::{
     AsExchange, AsExchangeConfig, Credential, StepResult, TgsExchange, TgsOptions, TgsStepResult,
 };
@@ -71,8 +72,14 @@ fn kdc_send(data: &[u8]) -> std::io::Result<Vec<u8>> {
 /// Route a TGS request to the correct KDC based on realm.
 fn kdc_send_for_realm(realm: &str, data: &[u8]) -> std::io::Result<Vec<u8>> {
     let addr = match realm {
+        REALM => KDC_ADDR,
         OTHER_REALM => KDC_OTHER_ADDR,
-        _ => KDC_ADDR,
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("unexpected realm routing target: {realm}"),
+            ));
+        }
     };
     kdc_send_to(addr, data)
 }
@@ -149,9 +156,10 @@ fn test_get_service_ticket() {
     );
 }
 
-/// Test: requesting a ticket for self (krbtgt/REALM) works.
+/// Test: requesting krbtgt/REALM via TGS exchange returns a valid TGT.
 ///
-/// This is useful for TGT renewal-like patterns.
+/// Verifies the TGS exchange can retrieve a krbtgt ticket (same pattern
+/// used by clients before explicit TGT renewal via RENEW flag).
 #[test]
 #[ignore = "requires KDC: docker compose -f docker-compose.test.yml up -d"]
 fn test_get_tgt_via_tgs() {
@@ -175,9 +183,9 @@ fn test_unknown_service_fails() {
 
     match result {
         Err(Krb5Error::KdcError(err)) => {
-            // Should be S_PRINCIPAL_UNKNOWN (7) after fallback
             assert_eq!(
-                err.error_code, 7,
+                err.error_code,
+                ErrorCode::SPrincipalUnknown as i32,
                 "expected S_PRINCIPAL_UNKNOWN, got {}",
                 err.error_code
             );

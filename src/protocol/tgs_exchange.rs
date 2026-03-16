@@ -33,7 +33,7 @@ const PA_TGS_REQ: i32 = 1;
 /// PA-PAC-OPTIONS padata type (MS-KILE §2.2.10).
 const PA_PAC_OPTIONS: i32 = 167;
 
-/// PA-PAC-OPTIONS flags: claims-aware (bit 56 = 0x40000000).
+/// PA-PAC-OPTIONS flags: claims-aware (0x40000000 in 32-bit BE field).
 const PA_PAC_OPTIONS_CLAIMS: [u8; 4] = [0x40, 0x00, 0x00, 0x00];
 
 /// UTC offset for KerberosTime construction.
@@ -290,10 +290,14 @@ impl TgsExchange {
                     realm: self.last_realm.clone(),
                 })
             }
-            KDC_ERR_S_PRINCIPAL_UNKNOWN if self.first_referral_attempt => {
-                // Fallback to non-referral on first S_PRINCIPAL_UNKNOWN
+            KDC_ERR_S_PRINCIPAL_UNKNOWN
+                if self.first_referral_attempt
+                    && matches!(resume, ResumeState::Referrals { .. }) =>
+            {
+                // Fallback to non-referral only when in referral mode.
+                // Resend to the same KDC that rejected the request.
                 self.first_referral_attempt = false;
-                let realm = self.cur_tgt.srealm.clone();
+                let realm = self.tgt_target_realm();
                 let tgs_req = self.build_tgs_req(false)?;
                 self.state = TgsState::AwaitReply {
                     resume: ResumeState::NonReferral,
@@ -395,6 +399,14 @@ impl TgsExchange {
         rep: &crate::types::KdcRep,
         enc_part: &EncKdcRepPart,
     ) -> Result<(), Krb5Error> {
+        // Client principal must match the TGT holder
+        if rep.cname != self.cur_tgt.client {
+            return Err(Krb5Error::ReplyValidation("client principal mismatch"));
+        }
+        if rep.crealm.as_bytes() != self.cur_tgt.crealm.as_bytes() {
+            return Err(Krb5Error::ReplyValidation("client realm mismatch"));
+        }
+
         // Nonce must match
         if enc_part.nonce != self.nonce {
             return Err(Krb5Error::ReplyValidation("nonce mismatch"));
@@ -564,7 +576,7 @@ impl TgsExchange {
             kdc_opts |= KdcOptions::CANONICALIZE;
         }
 
-        // till = far future (KDC will cap to policy)
+        // Request 10h lifetime; KDC will cap to its policy maximum
         let till = now_kerberos()
             .checked_add_signed(chrono::Duration::hours(10))
             .ok_or(Krb5Error::ReplyValidation("till overflow"))?;
