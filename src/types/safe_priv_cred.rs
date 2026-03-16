@@ -3,6 +3,7 @@
 use rasn::prelude::*;
 
 use super::basic::*;
+use super::flags::{KerberosFlags, TicketFlags};
 use super::primitives::*;
 use super::ticket::Ticket;
 
@@ -91,7 +92,7 @@ pub struct KrbCredInfo {
     #[rasn(tag(explicit(context, 2)))]
     pub pname: Option<PrincipalName>,
     #[rasn(tag(explicit(context, 3)))]
-    pub flags: Option<BitString>,
+    pub flags: Option<KerberosFlags<TicketFlags>>,
     #[rasn(tag(explicit(context, 4)))]
     pub authtime: Option<KerberosTime>,
     #[rasn(tag(explicit(context, 5)))]
