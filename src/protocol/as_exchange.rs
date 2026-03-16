@@ -157,6 +157,8 @@ pub struct AsExchange {
     last_req_body: Option<KdcReqBody>,
     /// The most recent DER-encoded AS-REQ (for RetryTcp re-emit).
     last_req_bytes: Vec<u8>,
+    /// Persisted salt from preauth hint (for AS-REP decryption).
+    last_preauth_salt: Option<Vec<u8>>,
     /// Persisted s2kparams from preauth hint (for AS-REP decryption).
     last_s2kparams: Option<Vec<u8>>,
     /// Loop counter to prevent infinite preauth loops.
@@ -175,6 +177,7 @@ impl AsExchange {
             nonce: 0,
             last_req_body: None,
             last_req_bytes: Vec::new(),
+            last_preauth_salt: None,
             last_s2kparams: None,
             loop_count: 0,
             credential: None,
@@ -219,11 +222,6 @@ impl AsExchange {
             return Err(Krb5Error::ReplyValidation("empty KDC reply"));
         }
 
-        self.loop_count += 1;
-        if self.loop_count > MAX_PREAUTH_LOOPS {
-            return Err(Krb5Error::PreauthLoopExceeded(MAX_PREAUTH_LOOPS));
-        }
-
         // Try to decode as AS-REP first
         if let Ok(as_rep) = rasn::der::decode::<AsRep>(kdc_reply) {
             return self.process_as_rep(as_rep);
@@ -234,11 +232,20 @@ impl AsExchange {
 
         match krb_error.error_code {
             KDC_ERR_PREAUTH_REQUIRED => {
+                self.loop_count += 1;
+                if self.loop_count > MAX_PREAUTH_LOOPS {
+                    return Err(Krb5Error::PreauthLoopExceeded(MAX_PREAUTH_LOOPS));
+                }
                 // Extract preauth hints from e-data
                 let e_data = krb_error.e_data.as_ref().ok_or(Krb5Error::NoCommonEtype)?;
                 let hint = extract_preauth_hint(e_data.as_ref(), &self.config.etypes)?;
 
-                // Persist s2kparams for AS-REP decryption later
+                // Persist salt and s2kparams for AS-REP decryption later
+                self.last_preauth_salt = if hint.salt.is_empty() {
+                    None
+                } else {
+                    Some(hint.salt.clone())
+                };
                 self.last_s2kparams = hint.s2kparams.clone();
 
                 // Build AS-REQ with preauth
@@ -305,12 +312,12 @@ impl AsExchange {
 
         // Compute till time using chrono
         let now = now_kerberos();
-        let till_secs = self.config.tkt_lifetime.as_secs() as i64;
+        let till_secs = duration_secs_i64(self.config.tkt_lifetime);
         let till = now + chrono::Duration::seconds(till_secs);
 
         // Compute rtime if renewable
         let rtime = if self.config.kdc_options.contains(KdcOptions::RENEWABLE) {
-            let rtime_secs = self.config.renew_lifetime.as_secs() as i64;
+            let rtime_secs = duration_secs_i64(self.config.renew_lifetime);
             Some(now + chrono::Duration::seconds(rtime_secs))
         } else {
             None
@@ -497,7 +504,12 @@ impl AsExchange {
             }
         }
 
-        // Default salt: REALM + principal components
+        // Fall back to persisted preauth hint salt (from PREAUTH_REQUIRED)
+        if let Some(ref salt) = self.last_preauth_salt {
+            return salt.clone();
+        }
+
+        // Last resort: compute default salt
         let components: Vec<&[u8]> = self
             .config
             .client
@@ -506,6 +518,16 @@ impl AsExchange {
             .map(|s| s.as_bytes())
             .collect();
         default_salt(&self.config.realm, &components)
+    }
+}
+
+/// Convert a `Duration` to `i64` seconds, clamping at `i64::MAX` to avoid overflow.
+fn duration_secs_i64(dur: Duration) -> i64 {
+    let secs = dur.as_secs();
+    if secs > i64::MAX as u64 {
+        i64::MAX
+    } else {
+        secs as i64
     }
 }
 

@@ -2,7 +2,7 @@
 
 /// KDC error code constants.
 ///
-/// Covers all error codes defined in RFC 4120 Section 7.5.9.
+/// Represents KDC error codes defined in RFC 4120 Section 7.5.9. This enum is not exhaustive.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i32)]
 pub enum ErrorCode {
@@ -58,10 +58,20 @@ pub enum ErrorCode {
     PreauthFailed = 24,
     /// Additional pre-authentication required.
     PreauthRequired = 25,
+    /// Server principal valid for user-to-user only.
+    ServerMustUseUser2User = 26,
+    /// KDC policy rejects transited path.
+    PathNotAccepted = 27,
+    /// A service is not available (SVC_UNAVAILABLE).
+    SvcUnavailable = 29,
     /// Inappropriate type of checksum in PDU.
     BadIntegrity = 31,
+    /// Ticket expired.
+    TktExpired = 32,
     /// Key version is not available.
     KeyTooOld = 33,
+    /// Cannot find TGT for requested realm.
+    CantGetTgt = 34,
     /// Ticket is not yet valid.
     TktNotYetValid = 35,
     /// Request is a replay.
@@ -78,6 +88,8 @@ pub enum ErrorCode {
     Modified = 41,
     /// Message out of order.
     BadOrder = 42,
+    /// Unauthorized use of session key.
+    BadKeyTouse = 43,
     /// Specified version of key is not available.
     KeyVersionNotAvailable = 44,
     /// Service key not available.
@@ -106,7 +118,7 @@ pub enum ErrorCode {
     InvalidSig = 64,
     /// Diffie-Hellman key parameters not accepted.
     DhKeyParamsNotAccepted = 65,
-    /// Certificate not valid.
+    /// Certificate revoked.
     CertificateRevoked = 66,
     /// Key/certificate not within etype.
     CertificateMismatch = 67,
@@ -162,8 +174,13 @@ impl ErrorCode {
             23 => Some(Self::KeyExpired),
             24 => Some(Self::PreauthFailed),
             25 => Some(Self::PreauthRequired),
+            26 => Some(Self::ServerMustUseUser2User),
+            27 => Some(Self::PathNotAccepted),
+            29 => Some(Self::SvcUnavailable),
             31 => Some(Self::BadIntegrity),
+            32 => Some(Self::TktExpired),
             33 => Some(Self::KeyTooOld),
+            34 => Some(Self::CantGetTgt),
             35 => Some(Self::TktNotYetValid),
             36 => Some(Self::Repeat),
             37 => Some(Self::Skew),
@@ -172,6 +189,7 @@ impl ErrorCode {
             40 => Some(Self::MsgType),
             41 => Some(Self::Modified),
             42 => Some(Self::BadOrder),
+            43 => Some(Self::BadKeyTouse),
             44 => Some(Self::KeyVersionNotAvailable),
             45 => Some(Self::ServiceKeyNotAvailable),
             46 => Some(Self::MutualFailed),
@@ -230,8 +248,13 @@ impl ErrorCode {
             Self::KeyExpired => "Password has expired",
             Self::PreauthFailed => "Pre-authentication information was invalid",
             Self::PreauthRequired => "Additional pre-authentication required",
+            Self::ServerMustUseUser2User => "Server principal valid for user-to-user only",
+            Self::PathNotAccepted => "KDC policy rejects transited path",
+            Self::SvcUnavailable => "A service is not available",
             Self::BadIntegrity => "Inappropriate type of checksum in PDU",
+            Self::TktExpired => "Ticket expired",
             Self::KeyTooOld => "Key version is not available",
+            Self::CantGetTgt => "Cannot find TGT for requested realm",
             Self::TktNotYetValid => "Ticket is not yet valid",
             Self::Repeat => "Request is a replay",
             Self::Skew => "Clock skew too great",
@@ -240,6 +263,7 @@ impl ErrorCode {
             Self::MsgType => "Invalid msg type",
             Self::Modified => "Message stream modified",
             Self::BadOrder => "Message out of order",
+            Self::BadKeyTouse => "Unauthorized use of session key",
             Self::KeyVersionNotAvailable => "Specified version of key is not available",
             Self::ServiceKeyNotAvailable => "Service key not available",
             Self::MutualFailed => "Mutual authentication failed",
@@ -254,7 +278,7 @@ impl ErrorCode {
             Self::KdcNotTrusted => "KDC not trusted",
             Self::InvalidSig => "Signature is invalid",
             Self::DhKeyParamsNotAccepted => "DH key parameters not accepted",
-            Self::CertificateRevoked => "Certificate not valid",
+            Self::CertificateRevoked => "Certificate revoked",
             Self::CertificateMismatch => "Key/certificate not within etype",
             Self::WrongRealm => "Wrong realm",
             Self::UserToUserRequired => "User to user required",
@@ -292,8 +316,8 @@ mod tests {
         // Verify every enum variant round-trips through from_i32
         let all_codes: &[i32] = &[
             0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, 31, 33, 35, 36, 37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48, 49, 50, 52, 60, 61,
-            62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
+            24, 25, 26, 27, 29, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47,
+            48, 49, 50, 52, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
         ];
         for &code in all_codes {
             assert!(
@@ -306,9 +330,10 @@ mod tests {
     #[test]
     fn test_from_i32_unknown_code() {
         assert_eq!(ErrorCode::from_i32(999), None);
-        assert_eq!(ErrorCode::from_i32(26), None); // gap between 25 and 31
-        assert_eq!(ErrorCode::from_i32(43), None); // gap between 42 and 44
+        assert_eq!(ErrorCode::from_i32(28), None); // gap: 28 not defined in RFC 4120
+        assert_eq!(ErrorCode::from_i32(30), None); // gap: 30 not defined
         assert_eq!(ErrorCode::from_i32(51), None); // gap between 50 and 52
+        assert_eq!(ErrorCode::from_i32(53), None); // gap between 52 and 60
     }
 
     #[test]

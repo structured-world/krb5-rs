@@ -12,10 +12,11 @@ pub(crate) const DEFAULT_MAX_CLOCK_SKEW: Duration = Duration::from_secs(300);
 ///
 /// Follows MIT krb5's `verify_as_reply()` checks:
 /// 1. Nonce match
-/// 2. Server principal match (unless canonicalize)
+/// 2. Server principal match (always validated)
 /// 3. Client principal match (unless canonicalize)
-/// 4. Ticket sname matches enc-part sname
-/// 5. Clock skew check on starttime/authtime
+/// 4. Realm checks (request realm vs reply crealm, ticket realm vs enc-part srealm)
+/// 5. Ticket sname matches enc-part sname
+/// 6. Clock skew check on starttime/authtime
 pub(crate) fn validate_as_reply(
     nonce: u32,
     request_body: &KdcReqBody,
@@ -30,12 +31,10 @@ pub(crate) fn validate_as_reply(
         return Err(Krb5Error::ReplyValidation("nonce mismatch"));
     }
 
-    // 2. Server principal must match (unless canonicalize was requested)
-    if !canonicalize {
-        if let Some(ref requested_sname) = request_body.sname {
-            if enc_part.sname != *requested_sname {
-                return Err(Krb5Error::ReplyValidation("server principal mismatch"));
-            }
+    // 2. Server principal must always match (regardless of canonicalize)
+    if let Some(ref requested_sname) = request_body.sname {
+        if enc_part.sname != *requested_sname {
+            return Err(Krb5Error::ReplyValidation("server principal mismatch"));
         }
     }
 
@@ -48,7 +47,16 @@ pub(crate) fn validate_as_reply(
         }
     }
 
-    // 4. Ticket server must match enc-part server
+    // 4. Realm checks: request realm must match reply crealm,
+    //    and ticket realm must match enc-part srealm
+    if request_body.realm != reply.crealm {
+        return Err(Krb5Error::ReplyValidation("realm mismatch"));
+    }
+    if reply.ticket.realm != enc_part.srealm {
+        return Err(Krb5Error::ReplyValidation("ticket/enc-part realm mismatch"));
+    }
+
+    // 5. Ticket server must match enc-part server
     if reply.ticket.sname != enc_part.sname {
         return Err(Krb5Error::ReplyValidation(
             "ticket/enc-part server mismatch",
