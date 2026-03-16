@@ -237,7 +237,9 @@ impl AsExchange {
                     return Err(Krb5Error::PreauthLoopExceeded(MAX_PREAUTH_LOOPS));
                 }
                 // Extract preauth hints from e-data
-                let e_data = krb_error.e_data.as_ref().ok_or(Krb5Error::NoCommonEtype)?;
+                let e_data = krb_error.e_data.as_ref().ok_or(Krb5Error::ReplyValidation(
+                    "PREAUTH_REQUIRED without e-data",
+                ))?;
                 let hint = extract_preauth_hint(e_data.as_ref(), &self.config.etypes)?;
 
                 // Persist salt and s2kparams for AS-REP decryption later
@@ -309,15 +311,15 @@ impl AsExchange {
         // Build server principal: krbtgt/REALM
         let sname = PrincipalName::new_srv_inst("krbtgt", &self.config.realm);
 
-        // Compute till time using chrono
+        // Compute till and rtime using checked arithmetic to avoid panic on overflow
         let now = now_kerberos();
-        let till_secs = duration_secs_i64(self.config.tkt_lifetime);
-        let till = now + chrono::Duration::seconds(till_secs);
+        let till_dur = chrono::Duration::seconds(duration_secs_i64(self.config.tkt_lifetime));
+        let till = now.checked_add_signed(till_dur).unwrap_or(now);
 
-        // Compute rtime if renewable
         let rtime = if self.config.kdc_options.contains(KdcOptions::RENEWABLE) {
-            let rtime_secs = duration_secs_i64(self.config.renew_lifetime);
-            Some(now + chrono::Duration::seconds(rtime_secs))
+            let rtime_dur =
+                chrono::Duration::seconds(duration_secs_i64(self.config.renew_lifetime));
+            Some(now.checked_add_signed(rtime_dur).unwrap_or(now))
         } else {
             None
         };
