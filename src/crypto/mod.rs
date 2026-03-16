@@ -146,10 +146,9 @@ pub trait EtypeProfile: Send + Sync {
 /// Registry of available encryption types.
 pub static ETYPE_REGISTRY: LazyLock<HashMap<i32, &'static dyn EtypeProfile>> =
     LazyLock::new(|| {
-        let mut m = HashMap::new();
-        m.insert(17, &Aes128CtsHmacSha196 as &dyn EtypeProfile);
-        m.insert(18, &Aes256CtsHmacSha196 as &dyn EtypeProfile);
-        m
+        let aes128 = &Aes128CtsHmacSha196 as &dyn EtypeProfile;
+        let aes256 = &Aes256CtsHmacSha196 as &dyn EtypeProfile;
+        HashMap::from([(aes128.etype(), aes128), (aes256.etype(), aes256)])
     });
 
 /// Look up an etype implementation by number.

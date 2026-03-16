@@ -20,6 +20,9 @@ pub(crate) fn dk(
     key_size: usize,
     block_size: usize,
 ) -> Result<Vec<u8>, CryptoError> {
+    if constant.is_empty() || block_size == 0 || key_size == 0 {
+        return Err(CryptoError::BadParams);
+    }
     let mut block = nfold(constant, block_size);
     let mut result = Vec::with_capacity(key_size);
 

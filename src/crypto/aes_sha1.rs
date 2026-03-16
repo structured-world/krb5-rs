@@ -23,6 +23,7 @@ pub struct Aes256CtsHmacSha196;
 
 // Shared implementation parameterized by key size
 fn aes_encrypt(key: &[u8], key_usage: i32, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    validate_aes_key_len(key)?;
     let ke = derive_key(key, key_usage, 0xAA)?;
     let ki = derive_key(key, key_usage, 0x55)?;
 
@@ -37,6 +38,7 @@ fn aes_encrypt(key: &[u8], key_usage: i32, plaintext: &[u8]) -> Result<Vec<u8>, 
 }
 
 fn aes_decrypt(key: &[u8], key_usage: i32, ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    validate_aes_key_len(key)?;
     let ke = derive_key(key, key_usage, 0xAA)?;
     let ki = derive_key(key, key_usage, 0x55)?;
 
@@ -69,7 +71,12 @@ fn aes_string_to_key(
     let iter_count = match params {
         Some(p) if p.len() == 4 => {
             let arr: [u8; 4] = p.try_into().map_err(|_| CryptoError::BadParams)?;
-            u32::from_be_bytes(arr)
+            let count = u32::from_be_bytes(arr);
+            // RFC 3962: 0x00000000 means 2^32 iterations (sentinel), reject as unsupported
+            if count == 0 {
+                return Err(CryptoError::BadParams);
+            }
+            count
         }
         Some(_) => return Err(CryptoError::BadParams),
         None => 4096,
@@ -82,7 +89,16 @@ fn aes_string_to_key(
     Ok(Zeroizing::new(derived))
 }
 
+/// Reject keys that are neither 16 nor 32 bytes (AES-128 or AES-256).
+fn validate_aes_key_len(key: &[u8]) -> Result<(), CryptoError> {
+    match key.len() {
+        16 | 32 => Ok(()),
+        _ => Err(CryptoError::BadKeySize),
+    }
+}
+
 fn aes_checksum(key: &[u8], key_usage: i32, data: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    validate_aes_key_len(key)?;
     let kc = derive_key(key, key_usage, 0x99)?;
     Ok(hmac_sha1_96(&kc, data))
 }
@@ -497,6 +513,122 @@ mod tests {
         // 3-byte params should fail
         let result = etype.string_to_key(b"pass", b"REALM", Some(&[0, 0, 0]));
         assert!(matches!(result, Err(CryptoError::BadParams)));
+    }
+
+    // Zero s2kparams sentinel (RFC 3962: 0x00000000 = 2^32 iterations)
+    #[test]
+    fn test_string_to_key_zero_params_rejected() {
+        let etype = Aes128CtsHmacSha196;
+        let result = etype.string_to_key(b"pass", b"REALM", Some(&[0, 0, 0, 0]));
+        assert!(matches!(result, Err(CryptoError::BadParams)));
+    }
+
+    // Key length validation
+    #[test]
+    fn test_encrypt_wrong_key_length_rejected() {
+        let etype = Aes128CtsHmacSha196;
+        // 24-byte key: neither AES-128 nor AES-256
+        let bad_key = [0x42u8; 24];
+        assert!(matches!(
+            etype.encrypt(&bad_key, 1, b"data"),
+            Err(CryptoError::BadKeySize)
+        ));
+        assert!(matches!(
+            etype.checksum(&bad_key, 1, b"data"),
+            Err(CryptoError::BadKeySize)
+        ));
+    }
+
+    // MIT krb5 known-answer decrypt vectors (t_decrypt.c)
+    // Format: {plaintext, key_usage, key, ciphertext} for AES128
+    #[test]
+    fn test_aes128_decrypt_mit_vectors() {
+        let etype = Aes128CtsHmacSha196;
+
+        // Vector 1: empty plaintext, usage=0
+        let key = [
+            0x5A, 0x5C, 0x0F, 0x0B, 0xA5, 0x4F, 0x38, 0x28, 0xB2, 0x19, 0x5E, 0x66, 0xCA, 0x24,
+            0xA2, 0x89,
+        ];
+        let ct = [
+            0x49, 0xFF, 0x8E, 0x11, 0xC1, 0x73, 0xD9, 0x58, 0x3A, 0x32, 0x54, 0xFB, 0xE7, 0xB1,
+            0xF1, 0xDF, 0x36, 0xC5, 0x38, 0xE8, 0x41, 0x67, 0x84, 0xA1, 0x67, 0x2E, 0x66, 0x76,
+        ];
+        let plain = etype.decrypt(&key, 0, &ct).expect("decrypt");
+        assert_eq!(plain, b"");
+
+        // Vector 2: "1", usage=1
+        let key = [
+            0x98, 0x45, 0x0E, 0x3F, 0x3B, 0xAA, 0x13, 0xF5, 0xC9, 0x9B, 0xEB, 0x93, 0x69, 0x81,
+            0xB0, 0x6F,
+        ];
+        let ct = [
+            0xF8, 0x67, 0x42, 0xF5, 0x37, 0xB3, 0x5D, 0xC2, 0x17, 0x4A, 0x4D, 0xBA, 0xA9, 0x20,
+            0xFA, 0xF9, 0x04, 0x20, 0x90, 0xB0, 0x65, 0xE1, 0xEB, 0xB1, 0xCA, 0xD9, 0xA6, 0x53,
+            0x94,
+        ];
+        let plain = etype.decrypt(&key, 1, &ct).expect("decrypt");
+        assert_eq!(plain, b"1");
+
+        // Vector 3: "9 bytesss", usage=2
+        let key = [
+            0x90, 0x62, 0x43, 0x0C, 0x8C, 0xDA, 0x33, 0x88, 0x92, 0x2E, 0x6D, 0x6A, 0x50, 0x9F,
+            0x5B, 0x7A,
+        ];
+        let ct = [
+            0x68, 0xFB, 0x96, 0x79, 0x60, 0x1F, 0x45, 0xC7, 0x88, 0x57, 0xB2, 0xBF, 0x82, 0x0F,
+            0xD6, 0xE5, 0x3E, 0xCA, 0x8D, 0x42, 0xFD, 0x4B, 0x1D, 0x70, 0x24, 0xA0, 0x92, 0x05,
+            0xAB, 0xB7, 0xCD, 0x2E, 0xC2, 0x6C, 0x35, 0x5D, 0x2F,
+        ];
+        let plain = etype.decrypt(&key, 2, &ct).expect("decrypt");
+        assert_eq!(plain, b"9 bytesss");
+
+        // Vector 4: "13 bytes byte", usage=3
+        let key = [
+            0x03, 0x3E, 0xE6, 0x50, 0x2C, 0x54, 0xFD, 0x23, 0xE2, 0x77, 0x91, 0xE9, 0x87, 0x98,
+            0x38, 0x27,
+        ];
+        let ct = [
+            0xEC, 0x36, 0x6D, 0x03, 0x27, 0xA9, 0x33, 0xBF, 0x49, 0x33, 0x0E, 0x65, 0x0E, 0x49,
+            0xBC, 0x6B, 0x97, 0x46, 0x37, 0xFE, 0x80, 0xBF, 0x53, 0x2F, 0xE5, 0x17, 0x95, 0xB4,
+            0x80, 0x97, 0x18, 0xE6, 0x19, 0x47, 0x24, 0xDB, 0x94, 0x8D, 0x1F, 0xD6, 0x37,
+        ];
+        let plain = etype.decrypt(&key, 3, &ct).expect("decrypt");
+        assert_eq!(plain, b"13 bytes byte");
+
+        // Vector 5: "30 bytes bytes bytes bytes byt", usage=4
+        let key = [
+            0xDC, 0xEE, 0xB7, 0x0B, 0x3D, 0xE7, 0x65, 0x62, 0xE6, 0x89, 0x22, 0x6C, 0x76, 0x42,
+            0x91, 0x48,
+        ];
+        let ct = [
+            0xC9, 0x60, 0x81, 0x03, 0x2D, 0x5D, 0x8E, 0xEB, 0x7E, 0x32, 0xB4, 0x08, 0x9F, 0x78,
+            0x9D, 0x0F, 0xAA, 0x48, 0x1D, 0xEA, 0x74, 0xC0, 0xF9, 0x7C, 0xBF, 0x31, 0x46, 0xDD,
+            0xFC, 0xF8, 0xE8, 0x00, 0x15, 0x6E, 0xCB, 0x53, 0x2F, 0xC2, 0x03, 0xE3, 0x0F, 0xF6,
+            0x00, 0xB6, 0x3B, 0x35, 0x09, 0x39, 0xFE, 0xCE, 0x51, 0x0F, 0x02, 0xD7, 0xFF, 0x1E,
+            0x7B, 0xAC,
+        ];
+        let plain = etype.decrypt(&key, 4, &ct).expect("decrypt");
+        assert_eq!(plain, b"30 bytes bytes bytes bytes byt");
+    }
+
+    // MIT krb5 known-answer decrypt vectors for AES-256 (t_decrypt.c)
+    #[test]
+    fn test_aes256_decrypt_mit_vectors() {
+        let etype = Aes256CtsHmacSha196;
+
+        // Vector 1: empty plaintext, usage=0
+        let key = [
+            0x17, 0xF2, 0x75, 0xF2, 0x95, 0x4F, 0x2E, 0xD1, 0xF9, 0x0C, 0x37, 0x7B, 0xA7, 0xF4,
+            0xD6, 0xA3, 0x69, 0xAA, 0x01, 0x36, 0xE0, 0xBF, 0x0C, 0x92, 0x7A, 0xD6, 0x13, 0x3C,
+            0x69, 0x37, 0x59, 0xA9,
+        ];
+        let ct = [
+            0xE5, 0x09, 0x4C, 0x55, 0xEE, 0x7B, 0x38, 0x26, 0x2E, 0x2B, 0x04, 0x42, 0x80, 0xB0,
+            0x69, 0x37, 0x9A, 0x95, 0xBF, 0x95, 0xBD, 0x83, 0x76, 0xFB, 0x32, 0x81, 0xB4, 0x35,
+        ];
+        let plain = etype.decrypt(&key, 0, &ct).expect("decrypt");
+        assert_eq!(plain, b"");
     }
 
     // Registry lookup
