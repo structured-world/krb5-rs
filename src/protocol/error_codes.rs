@@ -116,7 +116,7 @@ pub enum ErrorCode {
     /// Generic error.
     Generic = 60,
     /// Field is too long for implementation.
-    FieldToolong = 61,
+    FieldTooLong = 61,
     /// Client not trusted.
     ClientNotTrusted = 62,
     /// KDC not trusted.
@@ -207,7 +207,7 @@ impl ErrorCode {
             50 => Some(Self::InappropriateType),
             52 => Some(Self::ResponseTooBig),
             60 => Some(Self::Generic),
-            61 => Some(Self::FieldToolong),
+            61 => Some(Self::FieldTooLong),
             62 => Some(Self::ClientNotTrusted),
             63 => Some(Self::KdcNotTrusted),
             64 => Some(Self::InvalidSig),
@@ -282,7 +282,7 @@ impl ErrorCode {
             Self::InappropriateType => "Inappropriate type of checksum in PDU",
             Self::ResponseTooBig => "Response too big for UDP; retry with TCP",
             Self::Generic => "Generic error",
-            Self::FieldToolong => "Field is too long for implementation",
+            Self::FieldTooLong => "Field is too long for implementation",
             Self::ClientNotTrusted => "Client not trusted",
             Self::KdcNotTrusted => "KDC not trusted",
             Self::InvalidSig => "Signature is invalid",

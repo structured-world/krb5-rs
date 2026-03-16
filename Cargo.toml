@@ -34,7 +34,7 @@ bitflags = "2"
 tokio = { version = "1.50", features = ["net", "io-util", "time"], optional = true }
 
 # Time (rasn's GeneralizedTime = chrono::DateTime<FixedOffset>)
-chrono = "0.4"
+chrono = "0.4.38"
 
 # Error handling
 thiserror = "2.0"
