@@ -1,6 +1,6 @@
-//! Kerberos protocol state machines (AS, TGS, AP exchanges).
+//! Kerberos AS (Authentication Service) exchange state machine.
 //!
-//! This module implements the step-based protocol exchange pattern
+//! This module implements a step-based AS protocol exchange pattern
 //! following MIT krb5's `krb5_init_creds_step()` design. The caller
 //! drives the loop and controls transport — the state machine only
 //! produces outbound messages and consumes inbound responses.
