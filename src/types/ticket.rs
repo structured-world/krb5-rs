@@ -3,6 +3,7 @@
 use rasn::prelude::*;
 
 use super::basic::*;
+use super::flags::{KerberosFlags, TicketFlags};
 use super::primitives::*;
 
 /// Ticket (APPLICATION 1) — RFC 4120 §5.3.
@@ -24,7 +25,7 @@ pub struct Ticket {
 #[rasn(tag(explicit(application, 3)))]
 pub struct EncTicketPart {
     #[rasn(tag(explicit(context, 0)))]
-    pub flags: BitString,
+    pub flags: KerberosFlags<TicketFlags>,
     #[rasn(tag(explicit(context, 1)))]
     pub key: EncryptionKey,
     #[rasn(tag(explicit(context, 2)))]
