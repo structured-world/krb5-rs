@@ -284,28 +284,26 @@ impl AsExchange {
                 })
             }
             KDC_ERR_WRONG_REALM => {
-                // Client realm referral — KDC tells us the correct realm.
-                // Update realm from the error's crealm field and restart.
-                if let Some(ref crealm) = krb_error.crealm {
-                    let new_realm = String::from_utf8_lossy(crealm.as_bytes()).to_string();
-                    if new_realm != self.config.realm {
-                        self.config.realm = new_realm;
-                        // Clear cached preauth state — salt/s2kparams are realm-specific
-                        self.last_preauth_salt = None;
-                        self.last_s2kparams = None;
-                        // Reset preauth loop counter for the new realm
-                        self.loop_count = 0;
-                        // Restart: build a new initial AS-REQ for the new realm
-                        let (as_req_der, req_body) = self.build_as_req(None)?;
-                        self.last_req_body = Some(req_body);
-                        self.last_req_bytes = as_req_der.clone();
-                        return Ok(StepResult::SendToKdc {
-                            data: as_req_der,
-                            realm: self.config.realm.clone(),
-                        });
-                    }
+                // Realm referral — KDC tells us the correct realm.
+                // Use the server realm field (mandatory) rather than crealm (optional).
+                let new_realm = String::from_utf8_lossy(krb_error.realm.as_bytes()).to_string();
+                if new_realm != self.config.realm {
+                    self.config.realm = new_realm;
+                    // Clear cached preauth state — salt/s2kparams are realm-specific
+                    self.last_preauth_salt = None;
+                    self.last_s2kparams = None;
+                    // Reset preauth loop counter for the new realm
+                    self.loop_count = 0;
+                    // Restart: build a new initial AS-REQ for the new realm
+                    let (as_req_der, req_body) = self.build_as_req(None)?;
+                    self.last_req_body = Some(req_body);
+                    self.last_req_bytes = as_req_der.clone();
+                    return Ok(StepResult::SendToKdc {
+                        data: as_req_der,
+                        realm: self.config.realm.clone(),
+                    });
                 }
-                // If no crealm in error or same realm, propagate error
+                // If redirected to the same realm, propagate the original error
                 Err(Krb5Error::from_error_msg(krb_error))
             }
             _ => {
@@ -773,7 +771,10 @@ mod tests {
     }
 
     /// Helper: build a DER-encoded KRB-ERROR with the given error code.
-    fn build_krb_error(error_code: i32, crealm: Option<&str>) -> Vec<u8> {
+    /// Build a KRB-ERROR. `server_realm` sets the mandatory `realm` field
+    /// (used for WRONG_REALM redirect target).
+    fn build_krb_error(error_code: i32, server_realm: Option<&str>) -> Vec<u8> {
+        let realm_str = server_realm.unwrap_or("EXAMPLE.COM");
         let now = now_kerberos();
         let krb_error = KrbErrorMsg {
             pvno: 5,
@@ -783,10 +784,10 @@ mod tests {
             stime: now,
             susec: 0,
             error_code,
-            crealm: crealm.map(|r| GeneralString::from_bytes(r.as_bytes()).expect("crealm")),
+            crealm: None,
             cname: None,
-            realm: GeneralString::from_bytes(b"EXAMPLE.COM").expect("realm"),
-            sname: PrincipalName::new_srv_inst("krbtgt", "EXAMPLE.COM"),
+            realm: GeneralString::from_bytes(realm_str.as_bytes()).expect("realm"),
+            sname: PrincipalName::new_srv_inst("krbtgt", realm_str),
             e_text: None,
             e_data: None,
         };
