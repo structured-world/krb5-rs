@@ -352,11 +352,8 @@ impl AsExchange {
         // Always send PA-PAC-REQUEST; `request_pac` controls `include-pac` value
         padata.push(build_pa_pac_request(self.config.request_pac)?);
 
-        let padata_opt = if padata.is_empty() {
-            None
-        } else {
-            Some(padata)
-        };
+        // padata always has at least PA-PAC-REQUEST
+        let padata_opt = Some(padata);
 
         let kdc_req = KdcReq {
             pvno: 5,

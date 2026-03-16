@@ -63,7 +63,7 @@ pub(crate) fn validate_as_reply(
         ));
     }
 
-    // 5. Start time within acceptable clock skew
+    // 6. Start time within acceptable clock skew
     let starttime = enc_part.starttime.as_ref().unwrap_or(&enc_part.authtime);
     let skew = time_diff(starttime, &now);
     if skew > max_clock_skew {
