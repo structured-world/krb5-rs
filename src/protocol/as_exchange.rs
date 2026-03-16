@@ -64,6 +64,10 @@ pub struct AsExchangeConfig {
     pub max_clock_skew: Duration,
 }
 
+/// Default provides sensible options (etypes, flags, lifetimes) but leaves
+/// `client` and `realm` empty. Use `AsExchangeConfig::new()` instead of
+/// `Default::default()` directly — the empty client/realm will cause the
+/// exchange to fail at the KDC.
 impl Default for AsExchangeConfig {
     fn default() -> Self {
         Self {

@@ -80,12 +80,11 @@ pub(crate) fn validate_as_reply(
 
 /// Compute absolute time difference between two KerberosTime values.
 fn time_diff(a: &KerberosTime, b: &KerberosTime) -> Duration {
-    // KerberosTime = chrono::DateTime<FixedOffset>
-    let diff = (*a - *b).abs();
-    // to_std() only fails if negative (impossible after .abs()) or overflow
-    // (>584 billion years). MAX fallback ensures anomalous values exceed
-    // max_clock_skew and are rejected.
-    diff.to_std().unwrap_or(Duration::MAX)
+    // Compute absolute difference without .abs() (which panics on Duration::MIN).
+    // If either direction overflows or produces a negative chrono Duration,
+    // fall back to Duration::MAX so the clock skew check rejects it.
+    let chrono_diff = if *a >= *b { *a - *b } else { *b - *a };
+    chrono_diff.to_std().unwrap_or(Duration::MAX)
 }
 
 #[cfg(test)]

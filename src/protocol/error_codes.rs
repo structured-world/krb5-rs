@@ -8,6 +8,7 @@
 /// This enum adds typed conversion (`from_i32`), descriptions, and `Display`. The
 /// `as_exchange` module derives its match constants from this enum to keep a single source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 #[repr(i32)]
 pub enum ErrorCode {
     /// No error.
