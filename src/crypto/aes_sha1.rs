@@ -28,7 +28,8 @@ fn aes_encrypt(key: &[u8], key_usage: i32, plaintext: &[u8]) -> Result<Vec<u8>, 
     let ki = derive_key(key, key_usage, 0x55)?;
 
     let confounder = generate_random(AES_BLOCK);
-    let mut data = Zeroizing::new(confounder);
+    let mut data = Zeroizing::new(Vec::with_capacity(AES_BLOCK + plaintext.len()));
+    data.extend_from_slice(&confounder);
     data.extend_from_slice(plaintext);
 
     let hmac = hmac_sha1_96(&ki, &data);
@@ -52,8 +53,8 @@ fn aes_decrypt(key: &[u8], key_usage: i32, ciphertext: &[u8]) -> Result<Vec<u8>,
     }
 
     let (ct, received_hmac) = ciphertext.split_at(ct_len);
-    let plain = aes_cts_decrypt(&ke, ct)?;
-    let computed_hmac = hmac_sha1_96(&ki, &plain);
+    let plain = Zeroizing::new(aes_cts_decrypt(&ke, ct)?);
+    let computed_hmac = hmac_sha1_96(&ki, plain.as_slice());
 
     if !bool::from(computed_hmac.ct_eq(received_hmac)) {
         return Err(CryptoError::IntegrityFailure);
