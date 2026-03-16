@@ -680,6 +680,15 @@ fn test_kerberos_flags_type_safety() {
     // let _bad: KerberosFlags<KdcOptions> = ticket;  // won't compile
 }
 
+#[test]
+fn test_kerberos_flags_rejects_oversized_bitstring() {
+    // A BIT STRING longer than 32 bits must be rejected during decode
+    let oversized = BitString::from_slice(&[0x40, 0x00, 0x00, 0x00, 0x01]);
+    let encoded = der::encode(&oversized).unwrap();
+    let result = der::decode::<KerberosFlags<KdcOptions>>(&encoded);
+    assert!(result.is_err());
+}
+
 // --- Enum conversion tests ---
 
 #[test]

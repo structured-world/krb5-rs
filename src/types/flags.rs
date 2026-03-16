@@ -9,6 +9,8 @@ use core::fmt;
 use core::ops::{Deref, DerefMut};
 
 use bitflags::bitflags;
+use rasn::de::Error as _;
+use rasn::error::DecodeError;
 use rasn::prelude::*;
 
 // ---------------------------------------------------------------------------
@@ -108,6 +110,13 @@ impl<T: Flags> Decode for KerberosFlags<T> {
         let bits: BitString =
             BitString::decode_with_tag_and_constraints(decoder, tag, constraints)?;
         let raw = bits.as_raw_slice();
+        if raw.len() > 4 {
+            return Err(DecodeError::custom(
+                "KerberosFlags BIT STRING longer than 4 bytes / 32 bits",
+                decoder.codec(),
+            )
+            .into());
+        }
         Ok(Self {
             flags: T::from_bytes(raw),
         })
