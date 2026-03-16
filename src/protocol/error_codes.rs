@@ -42,7 +42,7 @@ pub enum ErrorCode {
     PadataTypeNosupp = 16,
     /// KDC has no support for transited type.
     TrtypeNosupp = 17,
-    /// Clients credentials have been revoked.
+    /// Client's credentials have been revoked.
     ClientRevoked = 18,
     /// Credentials for server have been revoked.
     ServiceRevoked = 19,
@@ -240,7 +240,7 @@ impl ErrorCode {
             Self::SumtypeNosupp => "KDC has no support for checksum type",
             Self::PadataTypeNosupp => "KDC has no support for padata type",
             Self::TrtypeNosupp => "KDC has no support for transited type",
-            Self::ClientRevoked => "Clients credentials have been revoked",
+            Self::ClientRevoked => "Client's credentials have been revoked",
             Self::ServiceRevoked => "Credentials for server have been revoked",
             Self::TgtRevoked => "TGT has been revoked",
             Self::ClientNotyet => "Client not yet valid",

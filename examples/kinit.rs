@@ -10,6 +10,9 @@ use std::time::Duration;
 use krb5_rs::protocol::{AsExchange, AsExchangeConfig, StepResult};
 use krb5_rs::types::PrincipalName;
 
+/// Maximum acceptable KDC response size (1 MiB).
+const MAX_KDC_RESPONSE_SIZE: usize = 1024 * 1024;
+
 fn main() {
     let kdc_addr = std::env::var("KDC_ADDR").unwrap_or_else(|_| "127.0.0.1:10188".to_string());
     let principal = std::env::var("KRB5_PRINCIPAL").unwrap_or_else(|_| "testuser".to_string());
@@ -63,6 +66,12 @@ fn tcp_send(addr: &str, data: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf)?;
     let resp_len = u32::from_be_bytes(len_buf) as usize;
+    if resp_len > MAX_KDC_RESPONSE_SIZE {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("KDC response too large: {resp_len} bytes (max {MAX_KDC_RESPONSE_SIZE})"),
+        ));
+    }
     let mut resp = vec![0u8; resp_len];
     stream.read_exact(&mut resp)?;
     Ok(resp)

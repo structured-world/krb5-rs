@@ -241,11 +241,7 @@ impl AsExchange {
                 let hint = extract_preauth_hint(e_data.as_ref(), &self.config.etypes)?;
 
                 // Persist salt and s2kparams for AS-REP decryption later
-                self.last_preauth_salt = if hint.salt.is_empty() {
-                    None
-                } else {
-                    Some(hint.salt.clone())
-                };
+                self.last_preauth_salt = hint.salt.clone();
                 self.last_s2kparams = hint.s2kparams.clone();
 
                 // Build AS-REQ with preauth
@@ -378,18 +374,19 @@ impl AsExchange {
             .with_timezone(&FixedOffset::east_opt(0).expect("UTC"));
         let usec = now_utc.timestamp_subsec_micros() as i32;
 
-        // Compute salt: use hint salt, or compute default
-        let salt = if hint.salt.is_empty() {
-            let components: Vec<&[u8]> = self
-                .config
-                .client
-                .name_string
-                .iter()
-                .map(|s| s.as_bytes())
-                .collect();
-            default_salt(&self.config.realm, &components)
-        } else {
-            hint.salt.clone()
+        // Compute salt: use hint salt if present, or compute default
+        let salt = match hint.salt {
+            Some(ref s) => s.clone(),
+            None => {
+                let components: Vec<&[u8]> = self
+                    .config
+                    .client
+                    .name_string
+                    .iter()
+                    .map(|s| s.as_bytes())
+                    .collect();
+                default_salt(&self.config.realm, &components)
+            }
         };
 
         let pa_timestamp = build_pa_enc_timestamp(
@@ -412,14 +409,10 @@ impl AsExchange {
         let etype = rep.enc_part.etype;
         let profile = find_etype(etype).map_err(|_| Krb5Error::UnsupportedEtype(etype))?;
 
-        // Derive key from password (use persisted s2kparams from preauth hint)
-        let salt = self.compute_reply_salt(rep);
+        // Derive key from password, preferring params from AS-REP padata
+        let (salt, s2kparams) = self.compute_reply_key_params(rep);
         let key = profile
-            .string_to_key(
-                self.password.as_bytes(),
-                &salt,
-                self.last_s2kparams.as_deref(),
-            )
+            .string_to_key(self.password.as_bytes(), &salt, s2kparams.as_deref())
             .map_err(|e| Krb5Error::Crypto(e.to_string()))?;
 
         // Decrypt EncAsRepPart (key usage 3)
@@ -483,9 +476,12 @@ impl AsExchange {
         Ok(StepResult::Complete)
     }
 
-    /// Compute salt for reply key derivation.
-    fn compute_reply_salt(&self, rep: &KdcRep) -> Vec<u8> {
-        // Try to extract salt from reply padata (PA-ETYPE-INFO2)
+    /// Compute salt and s2kparams for reply key derivation.
+    ///
+    /// Tries AS-REP padata first (PA-ETYPE-INFO2), then falls back to
+    /// persisted preauth hint values, then default salt.
+    fn compute_reply_key_params(&self, rep: &KdcRep) -> (Vec<u8>, Option<Vec<u8>>) {
+        // Try to extract salt and s2kparams from reply padata (PA-ETYPE-INFO2)
         if let Some(ref padata) = rep.padata {
             for pa in padata {
                 if pa.padata_type == PaDataType::EtypeInfo2 as i32 {
@@ -494,8 +490,18 @@ impl AsExchange {
                     ) {
                         for entry in &entries {
                             if entry.etype == rep.enc_part.etype {
-                                if let Some(ref s) = entry.salt {
-                                    return s.as_bytes().to_vec();
+                                let salt = entry.salt.as_ref().map(|s| s.as_bytes().to_vec());
+                                let s2kparams =
+                                    entry.s2kparams.as_ref().map(|p| p.as_ref().to_vec());
+                                // If salt found in AS-REP padata, use it (with its s2kparams)
+                                if let Some(s) = salt {
+                                    return (s, s2kparams);
+                                }
+                                // Salt absent in AS-REP entry but s2kparams present:
+                                // fall through to use persisted/default salt with these s2kparams
+                                if s2kparams.is_some() {
+                                    let fallback_salt = self.default_salt();
+                                    return (fallback_salt, s2kparams);
                                 }
                             }
                         }
@@ -504,12 +510,17 @@ impl AsExchange {
             }
         }
 
-        // Fall back to persisted preauth hint salt (from PREAUTH_REQUIRED)
+        // Fall back to persisted preauth hint values (from PREAUTH_REQUIRED)
         if let Some(ref salt) = self.last_preauth_salt {
-            return salt.clone();
+            return (salt.clone(), self.last_s2kparams.clone());
         }
 
-        // Last resort: compute default salt
+        // Last resort: compute default salt, use persisted s2kparams
+        (self.default_salt(), self.last_s2kparams.clone())
+    }
+
+    /// Compute default salt from realm and client principal components.
+    fn default_salt(&self) -> Vec<u8> {
         let components: Vec<&[u8]> = self
             .config
             .client

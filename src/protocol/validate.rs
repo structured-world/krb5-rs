@@ -12,7 +12,7 @@ pub(crate) const DEFAULT_MAX_CLOCK_SKEW: Duration = Duration::from_secs(300);
 ///
 /// Follows MIT krb5's `verify_as_reply()` checks:
 /// 1. Nonce match
-/// 2. Server principal match (always validated)
+/// 2. Server principal match (unless canonicalize)
 /// 3. Client principal match (unless canonicalize)
 /// 4. Realm checks (request realm vs reply crealm, ticket realm vs enc-part srealm)
 /// 5. Ticket sname matches enc-part sname
@@ -31,10 +31,13 @@ pub(crate) fn validate_as_reply(
         return Err(Krb5Error::ReplyValidation("nonce mismatch"));
     }
 
-    // 2. Server principal must always match (regardless of canonicalize)
-    if let Some(ref requested_sname) = request_body.sname {
-        if enc_part.sname != *requested_sname {
-            return Err(Krb5Error::ReplyValidation("server principal mismatch"));
+    // 2. Server principal must match (unless canonicalize — KDC may return
+    //    a canonicalized server principal)
+    if !canonicalize {
+        if let Some(ref requested_sname) = request_body.sname {
+            if enc_part.sname != *requested_sname {
+                return Err(Krb5Error::ReplyValidation("server principal mismatch"));
+            }
         }
     }
 

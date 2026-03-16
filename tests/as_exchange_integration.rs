@@ -24,6 +24,10 @@ use krb5_rs::Krb5Error;
 const KDC_ADDR: &str = "127.0.0.1:10188";
 const REALM: &str = "TEST.REALM";
 
+/// Maximum acceptable KDC response size (1 MiB). Protects against
+/// allocating arbitrarily large buffers from an untrusted length prefix.
+const MAX_KDC_RESPONSE_SIZE: usize = 1024 * 1024;
+
 /// Send a message to the KDC via TCP (4-byte big-endian length prefix).
 fn kdc_send(data: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut stream = TcpStream::connect(KDC_ADDR)?;
@@ -39,6 +43,12 @@ fn kdc_send(data: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut len_buf = [0u8; 4];
     stream.read_exact(&mut len_buf)?;
     let resp_len = u32::from_be_bytes(len_buf) as usize;
+    if resp_len > MAX_KDC_RESPONSE_SIZE {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("KDC response too large: {resp_len} bytes (max {MAX_KDC_RESPONSE_SIZE})"),
+        ));
+    }
     let mut resp = vec![0u8; resp_len];
     stream.read_exact(&mut resp)?;
     Ok(resp)

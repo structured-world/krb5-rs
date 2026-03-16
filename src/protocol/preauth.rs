@@ -66,7 +66,10 @@ pub(crate) struct PreauthHint {
     /// The encryption type to use.
     pub etype: i32,
     /// Salt for string-to-key (UTF-8 bytes).
-    pub salt: Vec<u8>,
+    ///
+    /// `None` means the KDC did not provide a salt — the caller must compute
+    /// the default salt. `Some(vec![])` is a valid explicit empty salt.
+    pub salt: Option<Vec<u8>>,
     /// Optional string-to-key parameters (e.g., PBKDF2 iteration count).
     pub s2kparams: Option<Vec<u8>>,
 }
@@ -98,10 +101,7 @@ pub(crate) fn extract_preauth_hint(
     // Find first entry with a supported etype
     for entry in &entries {
         if supported_etypes.contains(&entry.etype) && find_etype(entry.etype).is_ok() {
-            let salt = match &entry.salt {
-                Some(s) => s.as_bytes().to_vec(),
-                None => Vec::new(), // Caller must compute default salt
-            };
+            let salt = entry.salt.as_ref().map(|s| s.as_bytes().to_vec());
             let s2kparams = entry.s2kparams.as_ref().map(|p| p.as_ref().to_vec());
             return Ok(PreauthHint {
                 etype: entry.etype,
@@ -237,7 +237,7 @@ mod tests {
         // Client supports AES-256 and AES-128
         let hint = extract_preauth_hint(&e_data, &[18, 17]).expect("extract hint");
         assert_eq!(hint.etype, 18); // Should pick first matching: AES-256
-        assert_eq!(hint.salt, b"EXAMPLE.COMuser");
+        assert_eq!(hint.salt.as_deref(), Some(b"EXAMPLE.COMuser".as_slice()));
         assert!(hint.s2kparams.is_none());
     }
 
