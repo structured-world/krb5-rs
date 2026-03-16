@@ -58,8 +58,18 @@ fn tcp_send(addr: &str, data: &[u8]) -> std::io::Result<Vec<u8>> {
     let mut stream = TcpStream::connect(addr)?;
     stream.set_nodelay(true)?;
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+    let len_u32: u32 = data.len().try_into().map_err(|_| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "KDC request too large: {} bytes (max {})",
+                data.len(),
+                u32::MAX
+            ),
+        )
+    })?;
     let mut msg = Vec::with_capacity(4 + data.len());
-    msg.extend_from_slice(&(data.len() as u32).to_be_bytes());
+    msg.extend_from_slice(&len_u32.to_be_bytes());
     msg.extend_from_slice(data);
     stream.write_all(&msg)?;
     stream.flush()?;

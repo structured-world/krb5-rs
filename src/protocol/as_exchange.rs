@@ -342,7 +342,7 @@ impl AsExchange {
                 Some(t) => Some(t),
                 None => {
                     return Err(Krb5Error::ReplyValidation(
-                        "ticket lifetime overflow when computing rtime",
+                        "renewable lifetime overflow when computing rtime",
                     ))
                 }
             }
