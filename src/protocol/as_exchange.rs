@@ -275,6 +275,9 @@ impl AsExchange {
                     let new_realm = String::from_utf8_lossy(crealm.as_bytes()).to_string();
                     if new_realm != self.config.realm {
                         self.config.realm = new_realm;
+                        // Clear cached preauth state — salt/s2kparams are realm-specific
+                        self.last_preauth_salt = None;
+                        self.last_s2kparams = None;
                         // Restart: build a new initial AS-REQ for the new realm
                         let (as_req_der, req_body) = self.build_as_req(None)?;
                         self.last_req_body = Some(req_body);
