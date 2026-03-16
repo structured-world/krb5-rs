@@ -1,25 +1,62 @@
 #!/bin/bash
-set -e
+set -ex
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Install MIT KDC
+# Install MIT KDC (krb5.conf must not be bind-mounted during install
+# because krb5-config postinst tries to rename it)
 apt-get update -qq
-apt-get install -y -qq krb5-kdc krb5-admin-server netcat-openbsd >/dev/null 2>&1
+apt-get install -y -qq krb5-kdc krb5-admin-server
 
-# Create KDC database with master password "masterkey"
-mkdir -p /var/lib/krb5kdc /etc/krb5kdc
+# Write config files (overwrite the defaults created by package install)
+cat > /etc/krb5.conf <<'CONF'
+[libdefaults]
+    default_realm = TEST.REALM
+    dns_lookup_realm = false
+    dns_lookup_kdc = false
+[realms]
+    TEST.REALM = {
+        kdc = 127.0.0.1:88
+        admin_server = 127.0.0.1:749
+    }
+CONF
+
+cat > /etc/krb5kdc/kdc.conf <<'CONF'
+[kdcdefaults]
+    kdc_ports = 88
+    kdc_tcp_ports = 88
+[realms]
+    TEST.REALM = {
+        database_name = /var/lib/krb5kdc/principal
+        admin_keytab = /var/lib/krb5kdc/kadm5.keytab
+        acl_file = /etc/krb5kdc/kadm5.acl
+        key_stash_file = /etc/krb5kdc/stash
+        max_life = 24h
+        max_renewable_life = 7d
+        supported_enctypes = aes256-cts-hmac-sha1-96:normal aes128-cts-hmac-sha1-96:normal
+        default_principal_flags = +preauth
+    }
+CONF
+
+# Create KDC database
+mkdir -p /var/lib/krb5kdc
 kdb5_util create -s -P masterkey -r TEST.REALM
 
 # Create test principals
-# testuser with password "testpassword"
 kadmin.local -q "addprinc -pw testpassword testuser@TEST.REALM"
-# testuser2 with password "password2" (for multi-user tests)
 kadmin.local -q "addprinc -pw password2 testuser2@TEST.REALM"
-# Service principal
 kadmin.local -q "addprinc -randkey HTTP/server.test.realm@TEST.REALM"
 
 echo "KDC initialized. Starting..."
 
+# Enable KDC logging
+cat >> /etc/krb5.conf << 'LOGGING'
+
+[logging]
+    kdc = STDERR
+    admin_server = STDERR
+    default = STDERR
+LOGGING
+
 # Start KDC in foreground
-krb5kdc -n
+exec krb5kdc -n

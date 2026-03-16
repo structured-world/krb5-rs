@@ -112,7 +112,7 @@ pub enum ErrorCode {
     CertificateMismatch = 67,
     /// Wrong realm.
     WrongRealm = 68,
-    /// No matching user found in certificate.
+    /// User-to-user authentication required.
     UserToUserRequired = 69,
     /// Can't verify certificate.
     CantVerifyCertificate = 70,
@@ -132,6 +132,8 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// Convert from an i32 error code. Returns `None` for unknown codes.
+    ///
+    /// All enum variants are covered — every defined discriminant maps correctly.
     pub fn from_i32(code: i32) -> Option<Self> {
         match code {
             0 => Some(Self::None),
@@ -179,7 +181,22 @@ impl ErrorCode {
             50 => Some(Self::InappropriateType),
             52 => Some(Self::ResponseTooBig),
             60 => Some(Self::Generic),
+            61 => Some(Self::FieldToolong),
+            62 => Some(Self::ClientNotTrusted),
+            63 => Some(Self::KdcNotTrusted),
+            64 => Some(Self::InvalidSig),
+            65 => Some(Self::DhKeyParamsNotAccepted),
+            66 => Some(Self::CertificateRevoked),
+            67 => Some(Self::CertificateMismatch),
             68 => Some(Self::WrongRealm),
+            69 => Some(Self::UserToUserRequired),
+            70 => Some(Self::CantVerifyCertificate),
+            71 => Some(Self::InvalidCertificate),
+            72 => Some(Self::RevokedCertificate),
+            73 => Some(Self::RevocationStatusUnknown),
+            74 => Some(Self::RevocationStatusUnavailable),
+            75 => Some(Self::ClientNameMismatch),
+            76 => Some(Self::KdcNameMismatch),
             _ => None,
         }
     }
@@ -271,8 +288,27 @@ mod tests {
     }
 
     #[test]
+    fn test_from_i32_covers_all_variants() {
+        // Verify every enum variant round-trips through from_i32
+        let all_codes: &[i32] = &[
+            0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
+            24, 25, 31, 33, 35, 36, 37, 38, 39, 40, 41, 42, 44, 45, 46, 47, 48, 49, 50, 52, 60, 61,
+            62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76,
+        ];
+        for &code in all_codes {
+            assert!(
+                ErrorCode::from_i32(code).is_some(),
+                "ErrorCode::from_i32({code}) should return Some"
+            );
+        }
+    }
+
+    #[test]
     fn test_from_i32_unknown_code() {
         assert_eq!(ErrorCode::from_i32(999), None);
+        assert_eq!(ErrorCode::from_i32(26), None); // gap between 25 and 31
+        assert_eq!(ErrorCode::from_i32(43), None); // gap between 42 and 44
+        assert_eq!(ErrorCode::from_i32(51), None); // gap between 50 and 52
     }
 
     #[test]

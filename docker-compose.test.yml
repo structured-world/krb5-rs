@@ -3,15 +3,13 @@ services:
     image: ubuntu:24.04
     hostname: kdc.test.realm
     ports:
-      - "10088:88/udp"
-      - "10088:88/tcp"
+      - "10188:88/udp"
+      - "10188:88/tcp"
     volumes:
       - ./tests/kdc/setup.sh:/setup.sh:ro
-      - ./tests/kdc/krb5.conf:/etc/krb5.conf:ro
-      - ./tests/kdc/kdc.conf:/etc/krb5kdc/kdc.conf:ro
     command: ["/bin/bash", "/setup.sh"]
     healthcheck:
       test: ["CMD", "bash", "-c", "echo | nc -u -w1 127.0.0.1 88"]
       interval: 2s
       timeout: 5s
-      retries: 10
+      retries: 15

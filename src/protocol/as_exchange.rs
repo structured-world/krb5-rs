@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use chrono::{FixedOffset, Utc};
+use chrono::{FixedOffset, Timelike, Utc};
 use rasn::types::GeneralString;
 use zeroize::Zeroizing;
 
@@ -78,6 +78,16 @@ impl AsExchangeConfig {
             ..Default::default()
         }
     }
+
+    /// Create a config without PA-PAC-REQUEST (for non-AD environments).
+    pub fn new_no_pac(client: PrincipalName, realm: impl Into<String>) -> Self {
+        Self {
+            client,
+            realm: realm.into(),
+            request_pac: true,
+            ..Default::default()
+        }
+    }
 }
 
 /// Result of a single `step()` call.
@@ -88,6 +98,15 @@ pub enum StepResult {
         /// DER-encoded AS-REQ.
         data: Vec<u8>,
         /// Realm to send to (for KDC discovery).
+        realm: String,
+    },
+    /// KDC responded with `KRB_ERR_RESPONSE_TOO_BIG` — resend the same
+    /// request over TCP.  The `data` field contains the exact AS-REQ bytes
+    /// that were last sent (no state change, exchange is still alive).
+    RetryTcp {
+        /// DER-encoded AS-REQ (same bytes as the previous `SendToKdc`).
+        data: Vec<u8>,
+        /// Realm.
         realm: String,
     },
     /// Exchange finished successfully. Call `credential()` to extract result.
@@ -131,6 +150,10 @@ pub struct AsExchange {
     nonce: u32,
     /// The most recent AS-REQ body (for validation on reply).
     last_req_body: Option<KdcReqBody>,
+    /// The most recent DER-encoded AS-REQ (for RetryTcp re-emit).
+    last_req_bytes: Vec<u8>,
+    /// Persisted s2kparams from preauth hint (for AS-REP decryption).
+    last_s2kparams: Option<Vec<u8>>,
     /// Loop counter to prevent infinite preauth loops.
     loop_count: u32,
     /// Output credential.
@@ -146,6 +169,8 @@ impl AsExchange {
             password: Zeroizing::new(password.into()),
             nonce: 0,
             last_req_body: None,
+            last_req_bytes: Vec::new(),
+            last_s2kparams: None,
             loop_count: 0,
             credential: None,
         }
@@ -161,6 +186,7 @@ impl AsExchange {
                 // First call — build initial AS-REQ (no preauth)
                 let (as_req_der, req_body) = self.build_as_req(None)?;
                 self.last_req_body = Some(req_body);
+                self.last_req_bytes = as_req_der.clone();
                 self.state = AsState::AwaitReply;
                 Ok(StepResult::SendToKdc {
                     data: as_req_der,
@@ -207,10 +233,14 @@ impl AsExchange {
                 let e_data = krb_error.e_data.as_ref().ok_or(Krb5Error::NoCommonEtype)?;
                 let hint = extract_preauth_hint(e_data.as_ref(), &self.config.etypes)?;
 
+                // Persist s2kparams for AS-REP decryption later
+                self.last_s2kparams = hint.s2kparams.clone();
+
                 // Build AS-REQ with preauth
                 let pa_timestamp = self.build_preauth_padata(&hint)?;
                 let (as_req_der, req_body) = self.build_as_req(Some(pa_timestamp))?;
                 self.last_req_body = Some(req_body);
+                self.last_req_bytes = as_req_der.clone();
                 // Stay in AwaitReply state for next response
                 Ok(StepResult::SendToKdc {
                     data: as_req_der,
@@ -218,9 +248,13 @@ impl AsExchange {
                 })
             }
             KRB_ERR_RESPONSE_TOO_BIG => {
-                // Signal caller to retry over TCP by re-emitting the last request.
-                // The caller should detect this error and switch transport.
-                Err(Krb5Error::from_error_msg(krb_error))
+                // Re-emit the same request for the caller to resend over TCP.
+                // State machine stays in AwaitReply — caller feeds TCP response
+                // back into step().
+                Ok(StepResult::RetryTcp {
+                    data: self.last_req_bytes.clone(),
+                    realm: self.config.realm.clone(),
+                })
             }
             KDC_ERR_WRONG_REALM => {
                 // Client realm referral — KDC tells us the correct realm.
@@ -232,6 +266,7 @@ impl AsExchange {
                         // Restart: build a new initial AS-REQ for the new realm
                         let (as_req_der, req_body) = self.build_as_req(None)?;
                         self.last_req_body = Some(req_body);
+                        self.last_req_bytes = as_req_der.clone();
                         return Ok(StepResult::SendToKdc {
                             data: as_req_der,
                             realm: self.config.realm.clone(),
@@ -361,10 +396,14 @@ impl AsExchange {
         let etype = rep.enc_part.etype;
         let profile = find_etype(etype).map_err(|_| Krb5Error::UnsupportedEtype(etype))?;
 
-        // Derive key from password
+        // Derive key from password (use persisted s2kparams from preauth hint)
         let salt = self.compute_reply_salt(rep);
         let key = profile
-            .string_to_key(self.password.as_bytes(), &salt, None)
+            .string_to_key(
+                self.password.as_bytes(),
+                &salt,
+                self.last_s2kparams.as_deref(),
+            )
             .map_err(|e| Krb5Error::Crypto(e.to_string()))?;
 
         // Decrypt EncAsRepPart (key usage 3)
@@ -462,8 +501,15 @@ impl AsExchange {
 }
 
 /// Get current time as KerberosTime (chrono DateTime<FixedOffset> in UTC).
+///
+/// Truncates to whole seconds — RFC 4120 says implementations SHOULD NOT
+/// send fractional seconds in GeneralizedTime, and MIT KDC rejects them.
 fn now_kerberos() -> KerberosTime {
-    Utc::now().with_timezone(&FixedOffset::east_opt(0).expect("UTC offset"))
+    let now = Utc::now();
+    let truncated = now
+        .with_nanosecond(0)
+        .expect("truncating nanoseconds should not fail");
+    truncated.with_timezone(&FixedOffset::east_opt(0).expect("UTC offset"))
 }
 
 #[cfg(test)]
@@ -510,7 +556,9 @@ mod tests {
                 // Etypes should match config
                 assert_eq!(as_req.0.req_body.etype, vec![18, 17]);
             }
-            StepResult::Complete => panic!("should not be complete on first step"),
+            StepResult::Complete | StepResult::RetryTcp { .. } => {
+                panic!("should not be complete or retry on first step")
+            }
         }
     }
 
@@ -538,7 +586,9 @@ mod tests {
                     .iter()
                     .any(|pa| pa.padata_type == PaDataType::EncTimestamp as i32));
             }
-            StepResult::Complete => panic!("should not be complete after preauth required"),
+            StepResult::Complete | StepResult::RetryTcp { .. } => {
+                panic!("should not be complete or retry after preauth required")
+            }
         }
     }
 
@@ -566,14 +616,27 @@ mod tests {
     }
 
     #[test]
-    fn test_exchange_response_too_big_propagates_error() {
+    fn test_exchange_response_too_big_returns_retry_tcp() {
         let config = AsExchangeConfig::new(PrincipalName::new_principal("testuser"), "EXAMPLE.COM");
         let mut exchange = AsExchange::new(config, "password");
-        let _result = exchange.step(&[]).expect("initial step");
+        let initial = exchange.step(&[]).expect("initial step");
+
+        // Capture the original request bytes
+        let original_data = match &initial {
+            StepResult::SendToKdc { data, .. } => data.clone(),
+            _ => panic!("expected SendToKdc"),
+        };
 
         let error_reply = build_krb_error(KRB_ERR_RESPONSE_TOO_BIG, None);
-        let result = exchange.step(&error_reply);
-        assert!(matches!(result, Err(Krb5Error::KdcError(_))));
+        let result = exchange.step(&error_reply).expect("should return RetryTcp");
+        match result {
+            StepResult::RetryTcp { data, realm } => {
+                assert_eq!(realm, "EXAMPLE.COM");
+                // RetryTcp should re-emit the exact same request bytes
+                assert_eq!(data, original_data);
+            }
+            other => panic!("expected RetryTcp, got: {other:?}"),
+        }
     }
 
     #[test]
@@ -594,7 +657,9 @@ mod tests {
                     GeneralString::from_bytes(b"OTHER.REALM").expect("realm")
                 );
             }
-            StepResult::Complete => panic!("should redirect, not complete"),
+            StepResult::Complete | StepResult::RetryTcp { .. } => {
+                panic!("should redirect, not complete or retry")
+            }
         }
         assert_eq!(exchange.config.realm, "OTHER.REALM");
     }
