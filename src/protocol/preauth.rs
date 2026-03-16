@@ -5,7 +5,8 @@
 
 use crate::crypto::{find_etype, key_usage};
 use crate::types::{
-    EncryptedData, EtypeInfo2Entry, KerberosTime, PaData, PaDataType, PaEncTsEnc, PaPacRequest,
+    EncryptedData, EtypeInfo2Entry, EtypeInfoEntry, KerberosTime, PaData, PaDataType, PaEncTsEnc,
+    PaPacRequest,
 };
 use crate::Krb5Error;
 
@@ -86,31 +87,51 @@ pub(crate) fn extract_preauth_hint(
     // Decode METHOD-DATA (SEQUENCE OF PA-DATA)
     let method_data: Vec<PaData> = rasn::der::decode(e_data)?;
 
-    // Find PA-ETYPE-INFO2 (padata-type 19)
-    let etype_info2_pa = method_data
+    // First, try PA-ETYPE-INFO2 (padata-type 19)
+    if let Some(etype_info2_pa) = method_data
         .iter()
-        .find(|pa| pa.padata_type == PaDataType::EtypeInfo2 as i32);
+        .find(|pa| pa.padata_type == PaDataType::EtypeInfo2 as i32)
+    {
+        // Decode ETYPE-INFO2 (SEQUENCE OF ETYPE-INFO2-ENTRY)
+        let entries: Vec<EtypeInfo2Entry> =
+            rasn::der::decode(etype_info2_pa.padata_value.as_ref())?;
 
-    let etype_info2_pa = match etype_info2_pa {
-        Some(pa) => pa,
-        None => return Err(Krb5Error::NoCommonEtype),
-    };
+        // Select etype using client preference order: iterate client's etypes
+        // and pick the first one that the KDC also offers and we can handle.
+        for &client_etype in supported_etypes {
+            if let Some(entry) = entries.iter().find(|e| e.etype == client_etype) {
+                if find_etype(client_etype).is_ok() {
+                    let salt = entry.salt.as_ref().map(|s| s.as_bytes().to_vec());
+                    let s2kparams = entry.s2kparams.as_ref().map(|p| p.as_ref().to_vec());
+                    return Ok(PreauthHint {
+                        etype: entry.etype,
+                        salt,
+                        s2kparams,
+                    });
+                }
+            }
+        }
+    }
 
-    // Decode ETYPE-INFO2 (SEQUENCE OF ETYPE-INFO2-ENTRY)
-    let entries: Vec<EtypeInfo2Entry> = rasn::der::decode(etype_info2_pa.padata_value.as_ref())?;
+    // Fallback: try legacy PA-ETYPE-INFO (padata-type 11)
+    // RFC 4120 KDCs may send only this instead of PA-ETYPE-INFO2.
+    // EtypeInfoEntry has OctetString salt (no s2kparams).
+    if let Some(etype_info_pa) = method_data
+        .iter()
+        .find(|pa| pa.padata_type == PaDataType::EtypeInfo as i32)
+    {
+        let entries: Vec<EtypeInfoEntry> = rasn::der::decode(etype_info_pa.padata_value.as_ref())?;
 
-    // Select etype using client preference order: iterate client's etypes
-    // and pick the first one that the KDC also offers and we can handle.
-    for &client_etype in supported_etypes {
-        if let Some(entry) = entries.iter().find(|e| e.etype == client_etype) {
-            if find_etype(client_etype).is_ok() {
-                let salt = entry.salt.as_ref().map(|s| s.as_bytes().to_vec());
-                let s2kparams = entry.s2kparams.as_ref().map(|p| p.as_ref().to_vec());
-                return Ok(PreauthHint {
-                    etype: entry.etype,
-                    salt,
-                    s2kparams,
-                });
+        for &client_etype in supported_etypes {
+            if let Some(entry) = entries.iter().find(|e| e.etype == client_etype) {
+                if find_etype(client_etype).is_ok() {
+                    let salt = entry.salt.as_ref().map(|s| s.as_ref().to_vec());
+                    return Ok(PreauthHint {
+                        etype: entry.etype,
+                        salt,
+                        s2kparams: None,
+                    });
+                }
             }
         }
     }
