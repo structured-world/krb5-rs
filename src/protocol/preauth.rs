@@ -12,8 +12,9 @@ use crate::Krb5Error;
 /// A pluggable pre-authentication mechanism.
 ///
 /// Implementations handle specific PA-DATA types (e.g., PA-ENC-TIMESTAMP,
-/// PKINIT, encrypted challenge). The AS exchange iterates over registered
-/// plugins to find one that can satisfy the KDC's METHOD-DATA requirements.
+/// PKINIT, encrypted challenge). This trait provides an extension point that
+/// AS exchange implementations or callers can use to satisfy the KDC's
+/// METHOD-DATA requirements; wiring of plugins is left to higher-level code.
 ///
 /// # Implementing a Plugin
 ///
