@@ -410,8 +410,8 @@ impl AsExchange {
         let usec = now_utc.timestamp_subsec_micros() as i32;
 
         // Compute salt: use hint salt if present, or compute default
-        let salt = match hint.salt {
-            Some(ref s) => s.clone(),
+        let salt = match &hint.salt {
+            Some(s) => s.clone(),
             None => {
                 let components: Vec<&[u8]> = self
                     .config
@@ -526,8 +526,8 @@ impl AsExchange {
                         for entry in &entries {
                             if entry.etype == rep.enc_part.etype {
                                 // RFC 4120: absent salt means use default salt
-                                let salt = match entry.salt {
-                                    Some(ref s) => s.as_bytes().to_vec(),
+                                let salt = match &entry.salt {
+                                    Some(s) => s.as_bytes().to_vec(),
                                     None => self.default_salt(),
                                 };
                                 let s2kparams =
