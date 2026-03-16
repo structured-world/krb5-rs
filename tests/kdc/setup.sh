@@ -51,8 +51,10 @@ mkdir -p /var/lib/krb5kdc
 printf '%s\n' "$MASTER_KEY" | kdb5_util create -s -r TEST.REALM -W
 
 # Create test principals
-kadmin.local -q "addprinc -pw ${TESTUSER1_PASSWORD} testuser@TEST.REALM"
-kadmin.local -q "addprinc -pw ${TESTUSER2_PASSWORD} testuser2@TEST.REALM"
+printf '%s\n%s\n' "$TESTUSER1_PASSWORD" "$TESTUSER1_PASSWORD" | \
+    kadmin.local -q "addprinc testuser@TEST.REALM"
+printf '%s\n%s\n' "$TESTUSER2_PASSWORD" "$TESTUSER2_PASSWORD" | \
+    kadmin.local -q "addprinc testuser2@TEST.REALM"
 kadmin.local -q "addprinc -randkey HTTP/server.test.realm@TEST.REALM"
 
 echo "KDC initialized. Starting..."

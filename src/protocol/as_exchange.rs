@@ -148,7 +148,8 @@ enum AsState {
 ///
 /// loop {
 ///     match exchange.step(&kdc_reply)? {
-///         StepResult::SendToKdc { data, realm } => {
+///         StepResult::SendToKdc { data, realm }
+///         | StepResult::RetryTcp { data, realm } => {
 ///             kdc_reply = transport.send(&realm, &data).await?;
 ///         }
 ///         StepResult::Complete => break,
