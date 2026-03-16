@@ -30,10 +30,11 @@ const KDC_ERR_PREAUTH_REQUIRED: i32 = ErrorCode::PreauthRequired as i32;
 const KRB_ERR_RESPONSE_TOO_BIG: i32 = ErrorCode::ResponseTooBig as i32;
 const KDC_ERR_WRONG_REALM: i32 = ErrorCode::WrongRealm as i32;
 
-/// UTC offset for KerberosTime construction (FixedOffset::east_opt(0) always succeeds).
+/// UTC offset for KerberosTime construction.
+/// `east_opt(0)` is const fn in chrono 0.4.38+; if a future chrono version
+/// removes const-ness, replace this with a helper fn returning `.expect()`.
 const UTC_OFFSET: FixedOffset = match FixedOffset::east_opt(0) {
     Some(o) => o,
-    // SAFETY: offset 0 is always valid; this branch is unreachable.
     None => panic!("UTC offset 0 is always valid"),
 };
 
