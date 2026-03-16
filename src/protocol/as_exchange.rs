@@ -233,6 +233,9 @@ impl AsExchange {
 
         // Try to decode as AS-REP first
         if let Ok(as_rep) = rasn::der::decode::<AsRep>(kdc_reply) {
+            if as_rep.0.pvno != 5 || as_rep.0.msg_type != 11 {
+                return Err(Krb5Error::ReplyValidation("invalid AS-REP pvno/msg_type"));
+            }
             return self.process_as_rep(as_rep);
         }
 
@@ -315,7 +318,7 @@ impl AsExchange {
         self.nonce = rand::random::<u32>() & 0x7FFF_FFFF;
 
         let realm = GeneralString::from_bytes(self.config.realm.as_bytes())
-            .map_err(|e| Krb5Error::Crypto(format!("invalid realm string: {e}")))?;
+            .map_err(|_| Krb5Error::ReplyValidation("invalid realm string"))?;
 
         // Build server principal: krbtgt/REALM
         let sname = PrincipalName::new_srv_inst("krbtgt", &self.config.realm);
@@ -323,12 +326,26 @@ impl AsExchange {
         // Compute till and rtime using checked arithmetic to avoid panic on overflow
         let now = now_kerberos();
         let till_dur = chrono::Duration::seconds(duration_secs_i64(self.config.tkt_lifetime));
-        let till = now.checked_add_signed(till_dur).unwrap_or(now);
+        let till = match now.checked_add_signed(till_dur) {
+            Some(t) => t,
+            None => {
+                return Err(Krb5Error::Crypto(
+                    "ticket lifetime overflow when computing till".to_string(),
+                ))
+            }
+        };
 
         let rtime = if self.config.kdc_options.contains(KdcOptions::RENEWABLE) {
             let rtime_dur =
                 chrono::Duration::seconds(duration_secs_i64(self.config.renew_lifetime));
-            Some(now.checked_add_signed(rtime_dur).unwrap_or(now))
+            match now.checked_add_signed(rtime_dur) {
+                Some(t) => Some(t),
+                None => {
+                    return Err(Krb5Error::Crypto(
+                        "ticket lifetime overflow when computing rtime".to_string(),
+                    ))
+                }
+            }
         } else {
             None
         };
@@ -501,22 +518,14 @@ impl AsExchange {
                     ) {
                         for entry in &entries {
                             if entry.etype == rep.enc_part.etype {
-                                let salt = entry.salt.as_ref().map(|s| s.as_bytes().to_vec());
+                                // RFC 4120: absent salt means use default salt
+                                let salt = match entry.salt {
+                                    Some(ref s) => s.as_bytes().to_vec(),
+                                    None => self.default_salt(),
+                                };
                                 let s2kparams =
                                     entry.s2kparams.as_ref().map(|p| p.as_ref().to_vec());
-                                // If salt found in AS-REP padata, use it (with its s2kparams)
-                                if let Some(s) = salt {
-                                    return (s, s2kparams);
-                                }
-                                // Salt absent in AS-REP entry but s2kparams present:
-                                // use persisted preauth salt or default
-                                if s2kparams.is_some() {
-                                    let fallback_salt = self
-                                        .last_preauth_salt
-                                        .clone()
-                                        .unwrap_or_else(|| self.default_salt());
-                                    return (fallback_salt, s2kparams);
-                                }
+                                return (salt, s2kparams);
                             }
                         }
                     }
