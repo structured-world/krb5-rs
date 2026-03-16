@@ -83,9 +83,9 @@ fn time_diff(a: &KerberosTime, b: &KerberosTime) -> Duration {
     // KerberosTime = chrono::DateTime<FixedOffset>
     let diff = (*a - *b).abs();
     // to_std() only fails if negative (impossible after .abs()) or overflow
-    // (>584 billion years). ZERO fallback is conservative — would reject via
-    // clock skew check only if the actual skew exceeds the threshold.
-    diff.to_std().unwrap_or(Duration::ZERO)
+    // (>584 billion years). MAX fallback ensures anomalous values exceed
+    // max_clock_skew and are rejected.
+    diff.to_std().unwrap_or(Duration::MAX)
 }
 
 #[cfg(test)]

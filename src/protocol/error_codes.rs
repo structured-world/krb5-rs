@@ -3,6 +3,10 @@
 /// KDC error code constants.
 ///
 /// Represents KDC error codes defined in RFC 4120 Section 7.5.9. This enum is not exhaustive.
+///
+/// Note: raw i32 constants also exist in `crate::types::error_codes` (from `error_msg.rs`).
+/// This enum adds typed conversion (`from_i32`), descriptions, and `Display`. The
+/// `as_exchange` module derives its match constants from this enum to keep a single source.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i32)]
 pub enum ErrorCode {

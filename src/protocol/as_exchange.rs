@@ -30,6 +30,13 @@ const KDC_ERR_PREAUTH_REQUIRED: i32 = ErrorCode::PreauthRequired as i32;
 const KRB_ERR_RESPONSE_TOO_BIG: i32 = ErrorCode::ResponseTooBig as i32;
 const KDC_ERR_WRONG_REALM: i32 = ErrorCode::WrongRealm as i32;
 
+/// UTC offset for KerberosTime construction (FixedOffset::east_opt(0) always succeeds).
+const UTC_OFFSET: FixedOffset = match FixedOffset::east_opt(0) {
+    Some(o) => o,
+    // SAFETY: offset 0 is always valid; this branch is unreachable.
+    None => panic!("UTC offset 0 is always valid"),
+};
+
 /// Maximum pre-authentication loop iterations (matches MIT krb5).
 const MAX_PREAUTH_LOOPS: u32 = 16;
 
@@ -374,8 +381,8 @@ impl AsExchange {
         let now_utc = Utc::now();
         let now = now_utc
             .with_nanosecond(0)
-            .expect("truncating ns")
-            .with_timezone(&FixedOffset::east_opt(0).expect("UTC"));
+            .unwrap_or(now_utc)
+            .with_timezone(&UTC_OFFSET);
         let usec = now_utc.timestamp_subsec_micros() as i32;
 
         // Compute salt: use hint salt if present, or compute default
@@ -555,10 +562,10 @@ fn duration_secs_i64(dur: Duration) -> i64 {
 /// send fractional seconds in GeneralizedTime, and MIT KDC rejects them.
 fn now_kerberos() -> KerberosTime {
     let now = Utc::now();
-    let truncated = now
-        .with_nanosecond(0)
-        .expect("truncating nanoseconds should not fail");
-    truncated.with_timezone(&FixedOffset::east_opt(0).expect("UTC offset"))
+    // with_nanosecond(0) can only fail if value > 1_999_999_999; 0 always succeeds.
+    // unwrap_or keeps sub-second precision as safe fallback (KDC may still accept it).
+    let truncated = now.with_nanosecond(0).unwrap_or(now);
+    truncated.with_timezone(&UTC_OFFSET)
 }
 
 #[cfg(test)]
