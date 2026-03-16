@@ -23,10 +23,12 @@ use super::preauth::{
 };
 use super::validate::{validate_as_reply, DEFAULT_MAX_CLOCK_SKEW};
 
-/// KDC error codes relevant to AS exchange.
-const KDC_ERR_PREAUTH_REQUIRED: i32 = 25;
-const KRB_ERR_RESPONSE_TOO_BIG: i32 = 52;
-const KDC_ERR_WRONG_REALM: i32 = 68;
+use super::error_codes::ErrorCode;
+
+/// KDC error codes used in match patterns (derived from ErrorCode enum).
+const KDC_ERR_PREAUTH_REQUIRED: i32 = ErrorCode::PreauthRequired as i32;
+const KRB_ERR_RESPONSE_TOO_BIG: i32 = ErrorCode::ResponseTooBig as i32;
+const KDC_ERR_WRONG_REALM: i32 = ErrorCode::WrongRealm as i32;
 
 /// Maximum pre-authentication loop iterations (matches MIT krb5).
 const MAX_PREAUTH_LOOPS: u32 = 16;

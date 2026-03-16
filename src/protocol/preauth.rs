@@ -99,16 +99,19 @@ pub(crate) fn extract_preauth_hint(
     // Decode ETYPE-INFO2 (SEQUENCE OF ETYPE-INFO2-ENTRY)
     let entries: Vec<EtypeInfo2Entry> = rasn::der::decode(etype_info2_pa.padata_value.as_ref())?;
 
-    // Find first entry with a supported etype
-    for entry in &entries {
-        if supported_etypes.contains(&entry.etype) && find_etype(entry.etype).is_ok() {
-            let salt = entry.salt.as_ref().map(|s| s.as_bytes().to_vec());
-            let s2kparams = entry.s2kparams.as_ref().map(|p| p.as_ref().to_vec());
-            return Ok(PreauthHint {
-                etype: entry.etype,
-                salt,
-                s2kparams,
-            });
+    // Select etype using client preference order: iterate client's etypes
+    // and pick the first one that the KDC also offers and we can handle.
+    for &client_etype in supported_etypes {
+        if let Some(entry) = entries.iter().find(|e| e.etype == client_etype) {
+            if find_etype(client_etype).is_ok() {
+                let salt = entry.salt.as_ref().map(|s| s.as_bytes().to_vec());
+                let s2kparams = entry.s2kparams.as_ref().map(|p| p.as_ref().to_vec());
+                return Ok(PreauthHint {
+                    etype: entry.etype,
+                    salt,
+                    s2kparams,
+                });
+            }
         }
     }
 
