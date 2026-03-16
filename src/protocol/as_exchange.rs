@@ -288,8 +288,9 @@ impl AsExchange {
         &mut self,
         preauth_padata: Option<Vec<PaData>>,
     ) -> Result<(Vec<u8>, KdcReqBody), Krb5Error> {
-        // Generate random nonce
-        self.nonce = rand::random();
+        // Generate random nonce. Mask to 31 bits — MIT KDC decodes nonce
+        // as signed krb5_int32, rejecting DER-encoded values >= 2^31.
+        self.nonce = rand::random::<u32>() & 0x7FFF_FFFF;
 
         let realm = GeneralString::from_bytes(self.config.realm.as_bytes())
             .map_err(|e| Krb5Error::Crypto(format!("invalid realm string: {e}")))?;
