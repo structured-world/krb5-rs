@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use chrono::{FixedOffset, Timelike, Utc};
+use chrono::{Timelike, Utc};
 use rasn::types::GeneralString;
 use zeroize::Zeroizing;
 
@@ -21,7 +21,7 @@ use super::credential::{Credential, TicketTimes};
 use super::preauth::{
     build_pa_enc_timestamp, build_pa_pac_request, default_salt, extract_preauth_hint, PreauthHint,
 };
-use super::validate::{validate_as_reply, DEFAULT_MAX_CLOCK_SKEW};
+use super::validate::{validate_as_reply, DEFAULT_MAX_CLOCK_SKEW, UTC_OFFSET};
 
 use super::error_codes::ErrorCode;
 
@@ -29,14 +29,6 @@ use super::error_codes::ErrorCode;
 const KDC_ERR_PREAUTH_REQUIRED: i32 = ErrorCode::PreauthRequired as i32;
 const KRB_ERR_RESPONSE_TOO_BIG: i32 = ErrorCode::ResponseTooBig as i32;
 const KDC_ERR_WRONG_REALM: i32 = ErrorCode::WrongRealm as i32;
-
-/// UTC offset for KerberosTime construction.
-/// `east_opt(0)` is const fn in chrono 0.4.38+; if a future chrono version
-/// removes const-ness, replace this with a helper fn returning `.expect()`.
-const UTC_OFFSET: FixedOffset = match FixedOffset::east_opt(0) {
-    Some(o) => o,
-    None => panic!("UTC offset 0 is always valid"),
-};
 
 /// Maximum pre-authentication loop iterations (matches MIT krb5).
 const MAX_PREAUTH_LOOPS: u32 = 16;
