@@ -7,8 +7,9 @@ use chrono::{FixedOffset, Timelike, Utc};
 use crate::types::{EncKdcRepPart, KdcRep, KdcReqBody, KerberosTime};
 use crate::Krb5Error;
 
-/// UTC offset for KerberosTime construction.
-const UTC_OFFSET: FixedOffset = match FixedOffset::east_opt(0) {
+/// UTC offset (zero) for KerberosTime construction.
+/// Used by both AS and TGS exchange modules.
+pub(crate) const UTC_OFFSET: FixedOffset = match FixedOffset::east_opt(0) {
     Some(o) => o,
     None => panic!("UTC offset 0 is always valid"),
 };

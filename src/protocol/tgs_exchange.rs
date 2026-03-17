@@ -19,7 +19,7 @@ use zeroize::Zeroizing;
 
 use super::credential::{Credential, TicketTimes};
 use super::error_codes::ErrorCode;
-use super::validate::{now_kerberos, time_diff, DEFAULT_MAX_CLOCK_SKEW};
+use super::validate::{now_kerberos, time_diff, DEFAULT_MAX_CLOCK_SKEW, UTC_OFFSET};
 
 /// Maximum cross-realm referral hops (matches MIT's KRB5_REFERRAL_MAXHOPS).
 const MAX_REFERRAL_HOPS: u32 = 10;
@@ -680,7 +680,7 @@ impl TgsExchange {
         let ctime = now_instant
             .with_nanosecond(0)
             .unwrap_or(now_instant)
-            .with_timezone(&chrono::FixedOffset::east_opt(0).expect("UTC"));
+            .with_timezone(&UTC_OFFSET);
 
         let crealm = GeneralString::from_bytes(self.cur_tgt.crealm.as_bytes())
             .map_err(|_| Krb5Error::ReplyValidation("invalid crealm string"))?;
