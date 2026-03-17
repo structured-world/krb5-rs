@@ -271,10 +271,11 @@ impl TgsExchange {
             if tgs_rep.0.pvno != 5 || tgs_rep.0.msg_type != 13 {
                 return Err(Krb5Error::ReplyValidation("invalid TGS-REP pvno/msg_type"));
             }
-            // After a successful TGS-REP on any hop, do not allow
-            // S_PRINCIPAL_UNKNOWN fallback on later hops.
+            let step = self.process_tgs_rep(tgs_rep, resume)?;
+            // Only disable fallback after successful decrypt/validation —
+            // a malformed TGS-REP must not permanently kill the fallback path.
             self.first_referral_attempt = false;
-            return self.process_tgs_rep(tgs_rep, resume);
+            return Ok(step);
         }
 
         // Try to decode as KRB-ERROR
