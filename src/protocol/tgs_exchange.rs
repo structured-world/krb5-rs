@@ -34,8 +34,10 @@ const PA_TGS_REQ: i32 = 1;
 /// PA-PAC-OPTIONS padata type (MS-KILE §2.2.10).
 const PA_PAC_OPTIONS: i32 = 167;
 
-/// PA-PAC-OPTIONS flags: claims-aware (0x40000000 in 32-bit BE field).
-const PA_PAC_OPTIONS_CLAIMS: [u8; 4] = [0x40, 0x00, 0x00, 0x00];
+/// PA-PAC-OPTIONS flags: Branch Aware (bit 1 = 0x40000000 per MS-KILE §2.2.10).
+/// This matches what sspi-rs and Windows clients send for AD interop.
+/// Claims (bit 0) would be 0x80000000 — not set here.
+const PA_PAC_OPTIONS_FLAGS: [u8; 4] = [0x40, 0x00, 0x00, 0x00];
 
 /// UTC offset for KerberosTime construction.
 const UTC_OFFSET: FixedOffset = match FixedOffset::east_opt(0) {
@@ -733,7 +735,7 @@ fn build_pa_pac_options() -> Result<PaData, Krb5Error> {
     use rasn::types::BitString;
 
     let pac_options = PaPacOptions {
-        flags: BitString::from_slice(&PA_PAC_OPTIONS_CLAIMS),
+        flags: BitString::from_slice(&PA_PAC_OPTIONS_FLAGS),
     };
     let der = rasn::der::encode(&pac_options)?;
 
