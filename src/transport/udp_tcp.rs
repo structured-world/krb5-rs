@@ -51,6 +51,12 @@ impl UdpTcpTransport {
 
 impl KdcTransport for UdpTcpTransport {
     async fn send_recv(&self, _realm: &str, message: &[u8]) -> Result<Vec<u8>, Krb5Error> {
+        // Skip UDP for messages that exceed the datagram size limit —
+        // go directly to TCP instead of failing with an I/O error.
+        if message.len() > super::MAX_UDP_SIZE {
+            return tcp_send_recv(self.addr, message, self.tcp_timeout).await;
+        }
+
         // Try UDP first
         let udp_response = udp_send_recv(self.addr, message, self.udp_timeout).await?;
 
