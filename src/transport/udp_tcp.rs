@@ -7,15 +7,12 @@
 use std::net::SocketAddr;
 use std::time::Duration;
 
+use crate::protocol::ErrorCode;
 use crate::Krb5Error;
 
 use super::tcp::tcp_send_recv;
 use super::udp::udp_send_recv;
 use super::{KdcTransport, DEFAULT_TCP_TIMEOUT, DEFAULT_UDP_TIMEOUT};
-
-/// KRB_ERR_RESPONSE_TOO_BIG error code (52).
-/// Used to detect when UDP response was too large and TCP retry is needed.
-const KRB_ERR_RESPONSE_TOO_BIG: i32 = 52;
 
 /// Combined UDP/TCP transport.
 ///
@@ -72,7 +69,7 @@ impl KdcTransport for UdpTcpTransport {
 fn is_response_too_big(data: &[u8]) -> bool {
     // Quick check: try full ASN.1 decode of KRB-ERROR
     if let Ok(krb_error) = rasn::der::decode::<crate::types::KrbErrorMsg>(data) {
-        return krb_error.error_code == KRB_ERR_RESPONSE_TOO_BIG;
+        return krb_error.error_code == ErrorCode::ResponseTooBig as i32;
     }
     false
 }

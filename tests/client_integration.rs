@@ -1,3 +1,4 @@
+#![cfg(feature = "tokio")]
 //! Integration tests for the high-level KerberosClient API.
 //!
 //! These tests require a running KDC container:

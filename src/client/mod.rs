@@ -86,12 +86,17 @@ impl<T: KdcTransport> KerberosClient<T> {
                 StepResult::SendToKdc { data, realm } => {
                     kdc_reply = self.transport.send_recv(&realm, &data).await?;
                 }
-                StepResult::RetryTcp { data, realm } => {
-                    // The transport handles UDP→TCP fallback internally,
-                    // but if using a pure UDP transport that returned
-                    // RESPONSE_TOO_BIG, the state machine signals RetryTcp.
-                    // We just send again — the transport may use TCP this time.
-                    kdc_reply = self.transport.send_recv(&realm, &data).await?;
+                StepResult::RetryTcp { .. } => {
+                    // The state machine requested a retry over TCP
+                    // (typically after a RESPONSE_TOO_BIG over UDP),
+                    // but this client cannot explicitly force TCP on the
+                    // underlying transport. Retrying via the same API risks
+                    // repeated UDP sends and hitting the step limit.
+                    return Err(Krb5Error::ReplyValidation(
+                        "KDC requested TCP retry, but the client transport \
+                         cannot explicitly force TCP; configure a TCP-capable \
+                         transport for this realm",
+                    ));
                 }
                 StepResult::Complete => {
                     return exchange.credential().cloned();
@@ -133,8 +138,11 @@ impl<T: KdcTransport> KerberosClient<T> {
                 TgsStepResult::SendToKdc { data, realm } => {
                     kdc_reply = self.transport.send_recv(&realm, &data).await?;
                 }
-                TgsStepResult::RetryTcp { data, realm } => {
-                    kdc_reply = self.transport.send_recv(&realm, &data).await?;
+                TgsStepResult::RetryTcp { .. } => {
+                    return Err(Krb5Error::ReplyValidation(
+                        "TGS exchange requested TCP retry, but the client transport does not \
+                         support a TCP-specific retry path",
+                    ));
                 }
                 TgsStepResult::Complete => {
                     return exchange.credential().cloned();
