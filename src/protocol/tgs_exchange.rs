@@ -571,12 +571,12 @@ impl TgsExchange {
                 .map(|_| rand::random::<u8>())
                 .collect(),
         );
-        let subkey_bytes = profile
+        let mut subkey_bytes = profile
             .random_to_key(random_bytes.as_ref())
             .map_err(|e| Krb5Error::Crypto(e.to_string()))?;
-        // EncryptionKey::new wraps in its own Zeroizing internally;
-        // subkey_bytes (Zeroizing<Vec<u8>>) is zeroized when dropped here.
-        let subkey = EncryptionKey::new(etype, subkey_bytes.to_vec());
+        // Move key bytes out of Zeroizing without cloning.
+        // std::mem::take replaces the inner Vec with empty (zeroized on Zeroizing drop).
+        let subkey = EncryptionKey::new(etype, std::mem::take(&mut *subkey_bytes));
         self.subkey = Some(subkey.clone());
 
         // Build KDC-REQ-BODY
