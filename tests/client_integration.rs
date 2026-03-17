@@ -80,7 +80,10 @@ async fn test_client_wrong_password() {
 
     let result = client.acquire_tgt("testuser", "wrongpassword").await;
     assert!(
-        matches!(result, Err(Krb5Error::DecryptionFailed) | Err(Krb5Error::KdcError(_))),
+        matches!(
+            result,
+            Err(Krb5Error::DecryptionFailed) | Err(Krb5Error::KdcError(_))
+        ),
         "expected auth failure, got: {result:?}"
     );
 }

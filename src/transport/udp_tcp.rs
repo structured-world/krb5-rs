@@ -43,11 +43,7 @@ impl UdpTcpTransport {
     }
 
     /// Create a transport with custom timeouts.
-    pub fn with_timeouts(
-        addr: SocketAddr,
-        udp_timeout: Duration,
-        tcp_timeout: Duration,
-    ) -> Self {
+    pub fn with_timeouts(addr: SocketAddr, udp_timeout: Duration, tcp_timeout: Duration) -> Self {
         Self {
             addr,
             udp_timeout,

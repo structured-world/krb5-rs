@@ -62,17 +62,12 @@ pub(crate) async fn udp_send_recv(
         .map_err(Krb5Error::Transport)?;
     socket.connect(addr).await.map_err(Krb5Error::Transport)?;
 
-    socket
-        .send(message)
-        .await
-        .map_err(Krb5Error::Transport)?;
+    socket.send(message).await.map_err(Krb5Error::Transport)?;
 
     let mut buf = vec![0u8; MAX_UDP_SIZE];
     let n = tokio::time::timeout(timeout, socket.recv(&mut buf))
         .await
-        .map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::TimedOut, "UDP receive timed out")
-        })?
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "UDP receive timed out"))?
         .map_err(Krb5Error::Transport)?;
 
     buf.truncate(n);

@@ -65,8 +65,7 @@ impl<T: KdcTransport> KerberosClient<T> {
         principal: &str,
         password: &str,
     ) -> Result<Credential, Krb5Error> {
-        let config =
-            AsExchangeConfig::new(PrincipalName::new_principal(principal), &self.realm);
+        let config = AsExchangeConfig::new(PrincipalName::new_principal(principal), &self.realm);
         self.acquire_tgt_with_config(config, password).await
     }
 

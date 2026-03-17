@@ -53,9 +53,7 @@ pub(crate) async fn tcp_send_recv(
 ) -> Result<Vec<u8>, Krb5Error> {
     let mut stream = tokio::time::timeout(timeout, TcpStream::connect(addr))
         .await
-        .map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::TimedOut, "TCP connect timed out")
-        })?
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "TCP connect timed out"))?
         .map_err(Krb5Error::Transport)?;
 
     stream.set_nodelay(true).map_err(Krb5Error::Transport)?;
@@ -92,18 +90,14 @@ pub(crate) async fn tcp_send_recv(
     if resp_len > MAX_KDC_RESPONSE_SIZE {
         return Err(Krb5Error::Transport(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!(
-                "KDC response too large: {resp_len} bytes (max {MAX_KDC_RESPONSE_SIZE})"
-            ),
+            format!("KDC response too large: {resp_len} bytes (max {MAX_KDC_RESPONSE_SIZE})"),
         )));
     }
 
     let mut resp = vec![0u8; resp_len];
     tokio::time::timeout(timeout, stream.read_exact(&mut resp))
         .await
-        .map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::TimedOut, "TCP read body timed out")
-        })?
+        .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "TCP read body timed out"))?
         .map_err(Krb5Error::Transport)?;
 
     Ok(resp)
