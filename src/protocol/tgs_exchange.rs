@@ -9,17 +9,17 @@ use std::time::Duration;
 use crate::crypto::{find_etype, key_usage};
 use crate::types::{
     ApOptions, ApReq, Authenticator, Checksum, EncKdcRepPart, EncTgsRepPart, EncryptedData,
-    EncryptionKey, KdcOptions, KdcReq, KdcReqBody, KerberosFlags, KerberosTime, KrbErrorMsg,
-    PaData, PrincipalName, TgsRep, TgsReq, TicketFlags,
+    EncryptionKey, KdcOptions, KdcReq, KdcReqBody, KerberosFlags, KrbErrorMsg, PaData,
+    PrincipalName, TgsRep, TgsReq, TicketFlags,
 };
 use crate::Krb5Error;
-use chrono::{FixedOffset, Timelike, Utc};
+use chrono::Utc;
 use rasn::types::GeneralString;
 use zeroize::Zeroizing;
 
 use super::credential::{Credential, TicketTimes};
 use super::error_codes::ErrorCode;
-use super::validate::DEFAULT_MAX_CLOCK_SKEW;
+use super::validate::{now_kerberos, time_diff, DEFAULT_MAX_CLOCK_SKEW};
 
 /// Maximum cross-realm referral hops (matches MIT's KRB5_REFERRAL_MAXHOPS).
 const MAX_REFERRAL_HOPS: u32 = 10;
@@ -38,12 +38,6 @@ const PA_PAC_OPTIONS: i32 = 167;
 /// This matches what sspi-rs and Windows clients send for AD interop.
 /// Claims (bit 0) would be 0x80000000 — not set here.
 const PA_PAC_OPTIONS_FLAGS: [u8; 4] = [0x40, 0x00, 0x00, 0x00];
-
-/// UTC offset for KerberosTime construction.
-const UTC_OFFSET: FixedOffset = match FixedOffset::east_opt(0) {
-    Some(o) => o,
-    None => panic!("UTC offset 0 is always valid"),
-};
 
 /// Options controlling TGS exchange behavior.
 #[derive(Debug, Clone)]
@@ -443,14 +437,20 @@ impl TgsExchange {
             ));
         }
 
-        // Clock skew check on starttime/authtime
-        let starttime = enc_part.starttime.as_ref().unwrap_or(&enc_part.authtime);
+        // Clock skew check: only reject times that are too far in the future.
+        // In TGS-REPs, authtime is the time of initial AS authentication and can
+        // legitimately be far in the past (e.g., service ticket requested hours
+        // after TGT acquisition). We only check that starttime/authtime is not
+        // unreasonably ahead of "now".
         let now = now_kerberos();
-        let skew = time_diff(starttime, &now);
-        if skew > self.options.max_clock_skew {
-            return Err(Krb5Error::ClockSkew {
-                max_skew: self.options.max_clock_skew,
-            });
+        let check_time = enc_part.starttime.as_ref().unwrap_or(&enc_part.authtime);
+        if *check_time > now {
+            let skew = time_diff(check_time, &now);
+            if skew > self.options.max_clock_skew {
+                return Err(Krb5Error::ClockSkew {
+                    max_skew: self.options.max_clock_skew,
+                });
+            }
         }
 
         Ok(())
@@ -673,12 +673,9 @@ impl TgsExchange {
         };
 
         // 2. Build Authenticator
-        let now = Utc::now();
-        let usec = now.timestamp_subsec_micros() as i32;
-        let ctime = now
-            .with_nanosecond(0)
-            .unwrap_or(now)
-            .with_timezone(&UTC_OFFSET);
+        let now_utc = Utc::now();
+        let usec = now_utc.timestamp_subsec_micros() as i32;
+        let ctime = now_kerberos();
 
         let crealm = GeneralString::from_bytes(self.cur_tgt.crealm.as_bytes())
             .map_err(|_| Krb5Error::ReplyValidation("invalid crealm string"))?;
@@ -749,34 +746,22 @@ fn build_pa_pac_options() -> Result<PaData, Krb5Error> {
     })
 }
 
-/// Get current time as KerberosTime (truncated to whole seconds).
-fn now_kerberos() -> KerberosTime {
-    let now = Utc::now();
-    let truncated = now.with_nanosecond(0).unwrap_or(now);
-    truncated.with_timezone(&UTC_OFFSET)
-}
-
-/// Compute absolute time difference between two KerberosTime values.
-fn time_diff(a: &KerberosTime, b: &KerberosTime) -> Duration {
-    let chrono_diff = if *a >= *b { *a - *b } else { *b - *a };
-    chrono_diff.to_std().unwrap_or(Duration::MAX)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::types::{
-        EncKdcRepPart, EncryptedData, EncryptionKey, Flags, KdcRep, KerberosFlags, LastReqEntry,
-        PrincipalName, Ticket, TicketFlags,
+        EncKdcRepPart, EncryptedData, EncryptionKey, Flags, KdcRep, KerberosFlags, KerberosTime,
+        LastReqEntry, PrincipalName, Ticket, TicketFlags,
     };
-    use chrono::{TimeZone, Utc};
+    use chrono::{FixedOffset, TimeZone, Utc};
     use rasn::types::{GeneralString, OctetString};
 
     fn make_time(secs: i64) -> KerberosTime {
+        let utc = FixedOffset::east_opt(0).expect("UTC");
         Utc.timestamp_opt(secs, 0)
             .single()
             .expect("valid")
-            .with_timezone(&UTC_OFFSET)
+            .with_timezone(&utc)
     }
 
     fn make_realm(s: &str) -> GeneralString {
