@@ -1,0 +1,15 @@
+services:
+  kdc:
+    image: ubuntu:24.04
+    hostname: kdc.test.realm
+    ports:
+      - "10188:88/udp"
+      - "10188:88/tcp"
+    volumes:
+      - ./tests/kdc/setup.sh:/setup.sh:ro
+    command: ["/bin/bash", "/setup.sh"]
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo >/dev/tcp/127.0.0.1/88"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
