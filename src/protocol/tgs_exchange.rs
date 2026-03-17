@@ -47,6 +47,8 @@ pub struct TgsOptions {
     pub canonicalize: bool,
     /// Whether to request forwardable tickets. Default: true.
     pub forwardable: bool,
+    /// Whether to request renewable tickets. Default: true.
+    pub renewable: bool,
     /// Preferred encryption types. Default: [AES-256, AES-128].
     pub etypes: Vec<i32>,
     /// Maximum allowed clock skew. Default: 5 minutes.
@@ -60,6 +62,7 @@ impl Default for TgsOptions {
         Self {
             canonicalize: true,
             forwardable: true,
+            renewable: true,
             etypes: vec![18, 17], // AES-256, AES-128
             max_clock_skew: DEFAULT_MAX_CLOCK_SKEW,
             pac_options: true,
@@ -593,7 +596,10 @@ impl TgsExchange {
         let realm = GeneralString::from_bytes(target_realm.as_bytes())
             .map_err(|_| Krb5Error::ReplyValidation("invalid realm string"))?;
 
-        let mut kdc_opts = KdcOptions::RENEWABLE;
+        let mut kdc_opts = KdcOptions::empty();
+        if self.options.renewable {
+            kdc_opts |= KdcOptions::RENEWABLE;
+        }
         if self.options.forwardable {
             kdc_opts |= KdcOptions::FORWARDABLE;
         }
@@ -815,6 +821,7 @@ mod tests {
         let opts = TgsOptions::default();
         assert!(opts.canonicalize);
         assert!(opts.forwardable);
+        assert!(opts.renewable);
         assert_eq!(opts.etypes, vec![18, 17]);
         assert!(opts.pac_options);
     }
@@ -849,12 +856,42 @@ mod tests {
                 let opts_bytes = tgs_req.0.req_body.kdc_options.to_bytes();
                 let opts_u32 = u32::from_be_bytes(opts_bytes);
                 assert_ne!(opts_u32 & KdcOptions::CANONICALIZE.bits(), 0);
+                assert_ne!(opts_u32 & KdcOptions::RENEWABLE.bits(), 0);
+                // PA-PAC-OPTIONS should be present (default pac_options=true)
+                assert!(
+                    padata.iter().any(|pa| pa.padata_type == PA_PAC_OPTIONS),
+                    "PA-PAC-OPTIONS should be present by default"
+                );
             }
             _ => panic!("expected SendToKdc on first step"),
         }
 
         // Subkey should be generated
         assert!(exchange.subkey.is_some());
+    }
+
+    #[test]
+    fn test_pac_options_disabled_omits_padata() {
+        let tgt = make_tgt("EXAMPLE.COM");
+        let target = PrincipalName::new_srv_inst("HTTP", "web.example.com");
+        let opts = TgsOptions {
+            pac_options: false,
+            ..TgsOptions::default()
+        };
+        let mut exchange = TgsExchange::new(tgt, target, opts);
+
+        let result = exchange.step(&[]).expect("initial step");
+        match result {
+            TgsStepResult::SendToKdc { data, .. } => {
+                let tgs_req: TgsReq = rasn::der::decode(&data).expect("decode TGS-REQ");
+                let padata = tgs_req.0.padata.expect("should have padata");
+                assert!(
+                    !padata.iter().any(|pa| pa.padata_type == PA_PAC_OPTIONS),
+                    "PA-PAC-OPTIONS should be absent when disabled"
+                );
+            }
+            _ => panic!("expected SendToKdc"),
+        }
     }
 
     #[test]
