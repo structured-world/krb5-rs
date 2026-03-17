@@ -13,7 +13,7 @@ use crate::types::{
     PrincipalName, TgsRep, TgsReq, TicketFlags,
 };
 use crate::Krb5Error;
-use chrono::Utc;
+use chrono::{Timelike, Utc};
 use rasn::types::GeneralString;
 use zeroize::Zeroizing;
 
@@ -51,7 +51,7 @@ pub struct TgsOptions {
     pub etypes: Vec<i32>,
     /// Maximum allowed clock skew. Default: 5 minutes.
     pub max_clock_skew: Duration,
-    /// Whether to include PA-PAC-OPTIONS (claims-aware). Default: true.
+    /// Whether to include PA-PAC-OPTIONS (Branch Aware flag). Default: true.
     pub pac_options: bool,
 }
 
@@ -672,10 +672,15 @@ impl TgsExchange {
             checksum: cksum_bytes.into(),
         };
 
-        // 2. Build Authenticator
-        let now_utc = Utc::now();
-        let usec = now_utc.timestamp_subsec_micros() as i32;
-        let ctime = now_kerberos();
+        // 2. Build Authenticator — derive ctime and cusec from a single Utc::now()
+        // to avoid second-boundary skew between the two fields.
+        let now_instant = Utc::now();
+        let usec = now_instant.timestamp_subsec_micros() as i32;
+        // Truncate to whole seconds for ctime (RFC 4120: no fractional seconds).
+        let ctime = now_instant
+            .with_nanosecond(0)
+            .unwrap_or(now_instant)
+            .with_timezone(&chrono::FixedOffset::east_opt(0).expect("UTC"));
 
         let crealm = GeneralString::from_bytes(self.cur_tgt.crealm.as_bytes())
             .map_err(|_| Krb5Error::ReplyValidation("invalid crealm string"))?;
@@ -730,7 +735,7 @@ fn decode_enc_tgs_rep_part(plaintext: &[u8]) -> Result<EncKdcRepPart, Krb5Error>
     rasn::der::decode::<EncKdcRepPart>(plaintext).map_err(Krb5Error::Asn1Decode)
 }
 
-/// Build PA-PAC-OPTIONS padata with claims-aware flag.
+/// Build PA-PAC-OPTIONS padata with Branch Aware flag.
 fn build_pa_pac_options() -> Result<PaData, Krb5Error> {
     use crate::types::PaPacOptions;
     use rasn::types::BitString;
