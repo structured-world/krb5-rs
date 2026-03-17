@@ -6,34 +6,32 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Allow overriding credentials via env vars so secrets don't appear in ps output.
-# The default values below are for local testing only and MUST NOT be reused outside tests.
-MASTER_KEY="${KDC_MASTER_KEY:-masterkey}"
-TESTUSER1_PASSWORD="${KDC_TESTUSER1_PASSWORD:-testpassword}"
-TESTUSER2_PASSWORD="${KDC_TESTUSER2_PASSWORD:-password2}"
+# Second realm KDC for cross-realm referral testing.
+# Creates OTHER.REALM with trust to TEST.REALM.
 
-# Install MIT KDC (krb5.conf must not be bind-mounted during install
-# because krb5-config postinst tries to rename it)
+MASTER_KEY="${KDC_MASTER_KEY:-masterkey2}"
+TRUST_PASSWORD="${KDC_TRUST_PASSWORD:-crosstrust}"
+
 apt-get update -qq
 apt-get install -y -qq krb5-kdc krb5-admin-server
 
-# Write config files (overwrite the defaults created by package install)
+# Write config — knows about both realms
 cat > /etc/krb5.conf <<'CONF'
 [libdefaults]
-    default_realm = TEST.REALM
+    default_realm = OTHER.REALM
     dns_lookup_realm = false
     dns_lookup_kdc = false
 [realms]
-    TEST.REALM = {
+    OTHER.REALM = {
         kdc = 127.0.0.1:88
         admin_server = 127.0.0.1:749
     }
-    OTHER.REALM = {
-        kdc = kdc-other:88
+    TEST.REALM = {
+        kdc = kdc:88
     }
 [domain_realm]
-    .other.realm = OTHER.REALM
-    other.realm = OTHER.REALM
+    .test.realm = TEST.REALM
+    test.realm = TEST.REALM
 CONF
 
 cat > /etc/krb5kdc/kdc.conf <<'CONF'
@@ -41,7 +39,7 @@ cat > /etc/krb5kdc/kdc.conf <<'CONF'
     kdc_ports = 88
     kdc_tcp_ports = 88
 [realms]
-    TEST.REALM = {
+    OTHER.REALM = {
         database_name = /var/lib/krb5kdc/principal
         admin_keytab = /var/lib/krb5kdc/kadm5.keytab
         acl_file = /etc/krb5kdc/kadm5.acl
@@ -55,20 +53,14 @@ CONF
 
 # Create KDC database
 mkdir -p /var/lib/krb5kdc
-# -W reads password from stdin; kdb5_util prompts twice (enter + verify)
-printf '%s\n%s\n' "$MASTER_KEY" "$MASTER_KEY" | kdb5_util create -s -r TEST.REALM -W
+printf '%s\n%s\n' "$MASTER_KEY" "$MASTER_KEY" | kdb5_util create -s -r OTHER.REALM -W
 
-# Create test principals
-printf '%s\n%s\n' "$TESTUSER1_PASSWORD" "$TESTUSER1_PASSWORD" | \
-    kadmin.local -q "addprinc testuser@TEST.REALM"
-printf '%s\n%s\n' "$TESTUSER2_PASSWORD" "$TESTUSER2_PASSWORD" | \
-    kadmin.local -q "addprinc testuser2@TEST.REALM"
-kadmin.local -q "addprinc -randkey HTTP/server.test.realm@TEST.REALM"
+# Create service principal in OTHER.REALM
+kadmin.local -q "addprinc -randkey HTTP/service.other.realm@OTHER.REALM"
 
 # Cross-realm trust: both KDCs need both krbtgt principals with matching keys.
-# TEST.REALM uses krbtgt/OTHER.REALM@TEST.REALM to issue cross-realm TGTs;
-# OTHER.REALM uses the same key to verify them (and vice versa).
-TRUST_PASSWORD="${KDC_TRUST_PASSWORD:-crosstrust}"
+# OTHER.REALM uses krbtgt/TEST.REALM@OTHER.REALM to issue cross-realm TGTs;
+# TEST.REALM uses the same key to verify them (and vice versa).
 printf '%s\n%s\n' "$TRUST_PASSWORD" "$TRUST_PASSWORD" | \
     kadmin.local -q "addprinc krbtgt/OTHER.REALM@TEST.REALM"
 kadmin.local -q "modprinc -requires_preauth krbtgt/OTHER.REALM@TEST.REALM"
@@ -76,9 +68,8 @@ printf '%s\n%s\n' "$TRUST_PASSWORD" "$TRUST_PASSWORD" | \
     kadmin.local -q "addprinc krbtgt/TEST.REALM@OTHER.REALM"
 kadmin.local -q "modprinc -requires_preauth krbtgt/TEST.REALM@OTHER.REALM"
 
-echo "KDC initialized. Starting..."
+echo "OTHER.REALM KDC initialized. Starting..."
 
-# Enable KDC logging
 cat >> /etc/krb5.conf << 'LOGGING'
 
 [logging]
@@ -87,5 +78,4 @@ cat >> /etc/krb5.conf << 'LOGGING'
     default = STDERR
 LOGGING
 
-# Start KDC in foreground
 exec krb5kdc -n

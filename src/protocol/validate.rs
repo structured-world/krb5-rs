@@ -1,9 +1,18 @@
-//! AS-REP validation (following MIT's `verify_as_reply()`).
+//! Reply validation and shared time utilities for AS/TGS exchanges.
 
 use std::time::Duration;
 
+use chrono::{FixedOffset, Timelike, Utc};
+
 use crate::types::{EncKdcRepPart, KdcRep, KdcReqBody, KerberosTime};
 use crate::Krb5Error;
+
+/// UTC offset (zero) for KerberosTime construction.
+/// Used by both AS and TGS exchange modules.
+pub(crate) const UTC_OFFSET: FixedOffset = match FixedOffset::east_opt(0) {
+    Some(o) => o,
+    None => panic!("UTC offset 0 is always valid"),
+};
 
 /// Maximum allowed clock skew between client and KDC (default 5 minutes).
 pub(crate) const DEFAULT_MAX_CLOCK_SKEW: Duration = Duration::from_secs(300);
@@ -79,12 +88,22 @@ pub(crate) fn validate_as_reply(
 }
 
 /// Compute absolute time difference between two KerberosTime values.
-fn time_diff(a: &KerberosTime, b: &KerberosTime) -> Duration {
+pub(crate) fn time_diff(a: &KerberosTime, b: &KerberosTime) -> Duration {
     // Compute absolute difference without .abs() (which panics on Duration::MIN).
     // If either direction overflows or produces a negative chrono Duration,
     // fall back to Duration::MAX so the clock skew check rejects it.
     let chrono_diff = if *a >= *b { *a - *b } else { *b - *a };
     chrono_diff.to_std().unwrap_or(Duration::MAX)
+}
+
+/// Get current time as KerberosTime (truncated to whole seconds).
+///
+/// RFC 4120: implementations SHOULD NOT send fractional seconds in
+/// GeneralizedTime. MIT KDC rejects them.
+pub(crate) fn now_kerberos() -> KerberosTime {
+    let now = Utc::now();
+    let truncated = now.with_nanosecond(0).unwrap_or(now);
+    truncated.with_timezone(&UTC_OFFSET)
 }
 
 #[cfg(test)]
