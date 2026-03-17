@@ -69,7 +69,8 @@ impl Default for TgsOptions {
 
 /// Result of a single `step()` call.
 #[derive(Debug)]
-// Variants carry request payloads by value at step boundaries — acceptable.
+// #[allow] not #[expect]: clippy does not fire this lint here, but suppression
+// is kept defensively. Variants carry request payloads by value at step boundaries.
 #[allow(clippy::large_enum_variant)]
 pub enum TgsStepResult {
     /// Send this DER-encoded TGS-REQ to the KDC for the given realm.
