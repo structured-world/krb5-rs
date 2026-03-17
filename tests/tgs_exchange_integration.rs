@@ -36,6 +36,9 @@ const MAX_KDC_RESPONSE_SIZE: usize = 1024 * 1024;
 
 /// Send a message to a KDC via TCP (4-byte big-endian length prefix).
 fn kdc_send_to(addr: &str, data: &[u8]) -> std::io::Result<Vec<u8>> {
+    // TcpStream::connect is acceptable here — tests are #[ignore]'d and only
+    // run when Docker KDC is explicitly started. The read timeout below
+    // bounds the overall wait if the KDC is unresponsive.
     let mut stream = TcpStream::connect(addr)?;
     stream.set_nodelay(true)?;
     stream.set_read_timeout(Some(Duration::from_secs(10)))?;
