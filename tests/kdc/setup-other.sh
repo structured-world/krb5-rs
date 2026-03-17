@@ -58,8 +58,9 @@ printf '%s\n%s\n' "$MASTER_KEY" "$MASTER_KEY" | kdb5_util create -s -r OTHER.REA
 # Create service principal in OTHER.REALM
 kadmin.local -q "addprinc -randkey HTTP/service.other.realm@OTHER.REALM"
 
-# Create cross-realm trust principals (bidirectional).
-# Both KDCs must have matching krbtgt principals with the same key.
+# Cross-realm trust: both KDCs need both krbtgt principals with matching keys.
+# OTHER.REALM uses krbtgt/TEST.REALM@OTHER.REALM to issue cross-realm TGTs;
+# TEST.REALM uses the same key to verify them (and vice versa).
 printf '%s\n%s\n' "$TRUST_PASSWORD" "$TRUST_PASSWORD" | \
     kadmin.local -q "addprinc krbtgt/OTHER.REALM@TEST.REALM"
 kadmin.local -q "modprinc -requires_preauth krbtgt/OTHER.REALM@TEST.REALM"

@@ -15,6 +15,7 @@ use crate::types::{
 use crate::Krb5Error;
 use chrono::{FixedOffset, Timelike, Utc};
 use rasn::types::GeneralString;
+use zeroize::Zeroizing;
 
 use super::credential::{Credential, TicketTimes};
 use super::error_codes::ErrorCode;
@@ -270,6 +271,9 @@ impl TgsExchange {
             if tgs_rep.0.pvno != 5 || tgs_rep.0.msg_type != 13 {
                 return Err(Krb5Error::ReplyValidation("invalid TGS-REP pvno/msg_type"));
             }
+            // After a successful TGS-REP on any hop, do not allow
+            // S_PRINCIPAL_UNKNOWN fallback on later hops.
+            self.first_referral_attempt = false;
             return self.process_tgs_rep(tgs_rep, resume);
         }
 
@@ -424,6 +428,14 @@ impl TgsExchange {
             return Err(Krb5Error::ReplyValidation("ticket/enc-part realm mismatch"));
         }
 
+        // For non-referral replies, the service principal must match what we requested.
+        // Referral TGTs (krbtgt/OTHER-REALM) are validated in handle_referral() instead.
+        if !self.is_referral_tgt(enc_part) && enc_part.sname != self.target_server {
+            return Err(Krb5Error::ReplyValidation(
+                "unexpected service principal in TGS-REP",
+            ));
+        }
+
         // Clock skew check on starttime/authtime
         let starttime = enc_part.starttime.as_ref().unwrap_or(&enc_part.authtime);
         let now = now_kerberos();
@@ -554,12 +566,16 @@ impl TgsExchange {
         // Generate subkey (same etype as TGT session key)
         let etype = self.cur_tgt.session_key.keytype;
         let profile = find_etype(etype).map_err(|_| Krb5Error::UnsupportedEtype(etype))?;
-        let random_bytes: Vec<u8> = (0..profile.key_bytes())
-            .map(|_| rand::random::<u8>())
-            .collect();
+        let random_bytes: Zeroizing<Vec<u8>> = Zeroizing::new(
+            (0..profile.key_bytes())
+                .map(|_| rand::random::<u8>())
+                .collect(),
+        );
         let subkey_bytes = profile
-            .random_to_key(&random_bytes)
+            .random_to_key(random_bytes.as_ref())
             .map_err(|e| Krb5Error::Crypto(e.to_string()))?;
+        // EncryptionKey::new wraps in its own Zeroizing internally;
+        // subkey_bytes (Zeroizing<Vec<u8>>) is zeroized when dropped here.
         let subkey = EncryptionKey::new(etype, subkey_bytes.to_vec());
         self.subkey = Some(subkey.clone());
 

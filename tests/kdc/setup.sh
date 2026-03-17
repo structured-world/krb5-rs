@@ -65,8 +65,9 @@ printf '%s\n%s\n' "$TESTUSER2_PASSWORD" "$TESTUSER2_PASSWORD" | \
     kadmin.local -q "addprinc testuser2@TEST.REALM"
 kadmin.local -q "addprinc -randkey HTTP/server.test.realm@TEST.REALM"
 
-# Cross-realm trust principals (must match OTHER.REALM's trust keys).
-# Clear REQUIRES_PRE_AUTH — service-to-service trust doesn't use preauth.
+# Cross-realm trust: both KDCs need both krbtgt principals with matching keys.
+# TEST.REALM uses krbtgt/OTHER.REALM@TEST.REALM to issue cross-realm TGTs;
+# OTHER.REALM uses the same key to verify them (and vice versa).
 TRUST_PASSWORD="${KDC_TRUST_PASSWORD:-crosstrust}"
 printf '%s\n%s\n' "$TRUST_PASSWORD" "$TRUST_PASSWORD" | \
     kadmin.local -q "addprinc krbtgt/OTHER.REALM@TEST.REALM"

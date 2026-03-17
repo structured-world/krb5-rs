@@ -32,7 +32,7 @@ pub struct PaPacRequest {
 /// PA-PAC-OPTIONS (MS-KILE §2.2.10).
 ///
 /// Sent in TGS-REQ padata to request PAC-related options.
-/// The `flags` field uses KerberosFlags encoding (BIT STRING).
+/// The `flags` field is a BIT STRING of PAC-related option flags.
 #[derive(AsnType, Encode, Decode, Debug, Clone)]
 pub struct PaPacOptions {
     #[rasn(tag(explicit(context, 0)))]
