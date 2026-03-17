@@ -65,7 +65,13 @@ impl<T: KdcTransport> KerberosClient<T> {
         principal: &str,
         password: &str,
     ) -> Result<Credential, Krb5Error> {
-        let config = AsExchangeConfig::new(PrincipalName::new_principal(principal), &self.realm);
+        // Parse via FromStr to get a Result instead of panicking on invalid input.
+        // FromStr uses NT_SRV_HST for "svc/host" forms, but for simple names like
+        // "user" it produces NT_PRINCIPAL — which is what we need here.
+        let client: PrincipalName = principal
+            .parse()
+            .map_err(|_| Krb5Error::ReplyValidation("invalid client principal name"))?;
+        let config = AsExchangeConfig::new(client, &self.realm);
         self.acquire_tgt_with_config(config, password).await
     }
 
@@ -160,9 +166,13 @@ impl<T: KdcTransport> KerberosClient<T> {
 ///
 /// Accepts formats:
 /// - `SERVICE/hostname` — e.g., `HTTP/web.example.com`
+/// - `SERVICE/hostname@REALM` — realm suffix is stripped (realm comes from TGT)
 /// - `krbtgt/REALM` — cross-realm TGT
 fn parse_service_principal(service: &str) -> Result<PrincipalName, Krb5Error> {
-    match service.split_once('/') {
+    // Strip @REALM suffix if present — the realm for the TGS-REQ comes from
+    // the TGT, not from the SPN string.
+    let without_realm = service.split_once('@').map_or(service, |(left, _)| left);
+    match without_realm.split_once('/') {
         Some((svc, host)) => Ok(PrincipalName::new_srv_inst(svc, host)),
         None => Err(Krb5Error::ReplyValidation(
             "service principal must be in SERVICE/hostname format",
@@ -190,5 +200,11 @@ mod tests {
     fn test_parse_service_principal_no_slash() {
         let result = parse_service_principal("justahostname");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_service_principal_strips_realm() {
+        let p = parse_service_principal("HTTP/web.example.com@EXAMPLE.COM").expect("should parse");
+        assert_eq!(p.to_string(), "HTTP/web.example.com");
     }
 }

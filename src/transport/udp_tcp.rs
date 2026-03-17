@@ -65,9 +65,13 @@ impl KdcTransport for UdpTcpTransport {
 }
 
 /// Check if a DER-encoded response is a KRB-ERROR with error_code 52
-/// (RESPONSE_TOO_BIG). Uses minimal parsing to avoid a full ASN.1 decode.
+/// (RESPONSE_TOO_BIG).
+///
+/// Uses full ASN.1 decode rather than tag-peeking because: (a) KRB-ERROR has
+/// APPLICATION 30 tag — non-error responses have different APPLICATION tags so
+/// `rasn::der::decode` fails immediately on the outer tag without parsing inner
+/// fields, and (b) this runs once per UDP round-trip, not on a hot path.
 fn is_response_too_big(data: &[u8]) -> bool {
-    // Quick check: try full ASN.1 decode of KRB-ERROR
     if let Ok(krb_error) = rasn::der::decode::<crate::types::KrbErrorMsg>(data) {
         return krb_error.error_code == ErrorCode::ResponseTooBig as i32;
     }

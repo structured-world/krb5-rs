@@ -62,6 +62,16 @@ pub(crate) async fn udp_send_recv(
         .map_err(Krb5Error::Transport)?;
     socket.connect(addr).await.map_err(Krb5Error::Transport)?;
 
+    if message.len() > MAX_UDP_SIZE {
+        return Err(Krb5Error::Transport(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "KDC request too large for UDP: {} bytes (max {MAX_UDP_SIZE})",
+                message.len()
+            ),
+        )));
+    }
+
     socket.send(message).await.map_err(Krb5Error::Transport)?;
 
     let mut buf = vec![0u8; MAX_UDP_SIZE];
