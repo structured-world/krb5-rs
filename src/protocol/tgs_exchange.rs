@@ -431,9 +431,13 @@ impl TgsExchange {
             return Err(Krb5Error::ReplyValidation("ticket/enc-part realm mismatch"));
         }
 
-        // For non-referral replies, the service principal must match what we requested.
-        // Referral TGTs (krbtgt/OTHER-REALM) are validated in handle_referral() instead.
-        if !self.is_referral_tgt(enc_part) && enc_part.sname != self.target_server {
+        // For non-referral replies, the service principal must match what we requested
+        // when canonicalization is not in use. With CANONICALIZE, the KDC may return
+        // a canonicalized SPN. Referral TGTs are validated in handle_referral().
+        if !self.is_referral_tgt(enc_part)
+            && !self.options.canonicalize
+            && enc_part.sname != self.target_server
+        {
             return Err(Krb5Error::ReplyValidation(
                 "unexpected service principal in TGS-REP",
             ));
@@ -1238,7 +1242,9 @@ mod tests {
         };
 
         // handle_referral should strip OK_AS_DELEGATE from cur_tgt
-        let _result = exchange.handle_referral(&rep, &enc_part, resume);
+        exchange
+            .handle_referral(&rep, &enc_part, resume)
+            .expect("handle_referral should succeed");
         // After referral handling, cur_tgt should NOT have OK_AS_DELEGATE
         assert!(
             !exchange.cur_tgt.flags.contains(TicketFlags::OK_AS_DELEGATE),
@@ -1300,7 +1306,9 @@ mod tests {
             referral_count: 0,
         };
 
-        let _result = exchange.handle_referral(&rep, &enc_part, resume);
+        exchange
+            .handle_referral(&rep, &enc_part, resume)
+            .expect("handle_referral should succeed");
         assert!(
             exchange.cur_tgt.flags.contains(TicketFlags::OK_AS_DELEGATE),
             "OK_AS_DELEGATE should be preserved when cross-realm TGT also has it"
