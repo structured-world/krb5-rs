@@ -16,7 +16,7 @@ readme = "README.md"
 rasn = "0.28"
 
 # Crypto
-aes = "0.8"
+aes = "0.9"
 hmac = "0.13"
 sha1 = "0.11"
 sha2 = "0.11"
