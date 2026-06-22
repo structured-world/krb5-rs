@@ -1,6 +1,6 @@
 //! Cryptographic utility functions.
 
-use rand::Rng;
+use rand::RngExt;
 
 /// Generate `len` cryptographically random bytes using the OS CSPRNG.
 pub(crate) fn generate_random(len: usize) -> Vec<u8> {

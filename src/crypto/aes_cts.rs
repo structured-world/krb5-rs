@@ -4,8 +4,7 @@
 //! For inputs > 1 block, the last two ciphertext blocks are swapped and
 //! the second-to-last is truncated to the actual data length.
 
-use aes::cipher::generic_array::GenericArray;
-use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::cipher::{Block, BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
 
 use super::CryptoError;
 
@@ -116,25 +115,29 @@ pub(crate) fn aes_ecb_encrypt_block(key: &[u8], block: &[u8]) -> Result<Vec<u8>,
     if block.len() != AES_BLOCK {
         return Err(CryptoError::InputTooShort);
     }
-    let mut out = GenericArray::clone_from_slice(block);
     match key.len() {
         16 => {
-            let cipher = aes::Aes128::new(GenericArray::from_slice(key));
+            let cipher = aes::Aes128::new_from_slice(key).map_err(|_| CryptoError::BadKeySize)?;
+            let mut out =
+                Block::<aes::Aes128>::try_from(block).map_err(|_| CryptoError::InputTooShort)?;
             cipher.encrypt_block(&mut out);
+            Ok(out.to_vec())
         }
         32 => {
-            let cipher = aes::Aes256::new(GenericArray::from_slice(key));
+            let cipher = aes::Aes256::new_from_slice(key).map_err(|_| CryptoError::BadKeySize)?;
+            let mut out =
+                Block::<aes::Aes256>::try_from(block).map_err(|_| CryptoError::InputTooShort)?;
             cipher.encrypt_block(&mut out);
+            Ok(out.to_vec())
         }
-        _ => return Err(CryptoError::BadKeySize),
+        _ => Err(CryptoError::BadKeySize),
     }
-    Ok(out.to_vec())
 }
 
 /// AES-CBC encrypt with given IV. Input must be block-aligned.
 /// Implemented manually using AES-ECB + XOR (standard CBC construction).
 fn aes_cbc_encrypt(key: &[u8], iv: &[u8; AES_BLOCK], data: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    if data.len() % AES_BLOCK != 0 {
+    if !data.len().is_multiple_of(AES_BLOCK) {
         return Err(CryptoError::InputTooShort);
     }
     let mut result = Vec::with_capacity(data.len());
@@ -155,7 +158,7 @@ fn aes_cbc_encrypt(key: &[u8], iv: &[u8; AES_BLOCK], data: &[u8]) -> Result<Vec<
 
 /// AES-CBC decrypt with given IV. Input must be block-aligned.
 fn aes_cbc_decrypt(key: &[u8], iv: &[u8; AES_BLOCK], data: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    if data.len() % AES_BLOCK != 0 {
+    if !data.len().is_multiple_of(AES_BLOCK) {
         return Err(CryptoError::InputTooShort);
     }
     let mut result = Vec::with_capacity(data.len());
@@ -178,19 +181,23 @@ fn aes_ecb_decrypt_block(key: &[u8], block: &[u8]) -> Result<Vec<u8>, CryptoErro
     if block.len() != AES_BLOCK {
         return Err(CryptoError::InputTooShort);
     }
-    let mut out = GenericArray::clone_from_slice(block);
     match key.len() {
         16 => {
-            let cipher = aes::Aes128::new(GenericArray::from_slice(key));
+            let cipher = aes::Aes128::new_from_slice(key).map_err(|_| CryptoError::BadKeySize)?;
+            let mut out =
+                Block::<aes::Aes128>::try_from(block).map_err(|_| CryptoError::InputTooShort)?;
             cipher.decrypt_block(&mut out);
+            Ok(out.to_vec())
         }
         32 => {
-            let cipher = aes::Aes256::new(GenericArray::from_slice(key));
+            let cipher = aes::Aes256::new_from_slice(key).map_err(|_| CryptoError::BadKeySize)?;
+            let mut out =
+                Block::<aes::Aes256>::try_from(block).map_err(|_| CryptoError::InputTooShort)?;
             cipher.decrypt_block(&mut out);
+            Ok(out.to_vec())
         }
-        _ => return Err(CryptoError::BadKeySize),
+        _ => Err(CryptoError::BadKeySize),
     }
-    Ok(out.to_vec())
 }
 
 #[cfg(test)]

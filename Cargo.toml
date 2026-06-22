@@ -2,7 +2,7 @@
 name = "krb5-rs"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.92"
 license = "Apache-2.0"
 description = "Pure Rust Kerberos V5: GSSAPI, SPNEGO, PKINIT. No C FFI, no system krb5 dependency."
 repository = "https://github.com/structured-world/krb5-rs"
@@ -17,14 +17,14 @@ readme = "README.md"
 rasn = "0.28"
 
 # Crypto
-aes = "0.8"
-hmac = "0.12"
-sha1 = "0.10"
+aes = "0.9"
+hmac = "0.13"
+sha1 = "0.11"
 sha2 = "0.11"
 md-5 = "0.11"              # Legacy RC4-HMAC + GSSAPI channel bindings
-pbkdf2 = "0.12"
+pbkdf2 = "0.13"
 subtle = "2"               # Constant-time comparison
-rand = "0.9"
+rand = "0.10"
 zeroize = { version = "1", features = ["derive"] }
 
 # Flags
@@ -44,7 +44,7 @@ tokio = { version = "1.50", features = ["full"] }
 
 [features]
 default = []
-client = []                # Kerberos client (TGT/TGS request) — planned
+client = ["tokio"]         # Kerberos client (TGT/TGS request)
 gssapi = []                # GSSAPI/SPNEGO mechanism
 pkinit = ["dep:x509-parser", "dep:rcgen"]  # PKINIT (X.509 + Kerberos)
 fast = []                  # FAST pre-authentication tunneling

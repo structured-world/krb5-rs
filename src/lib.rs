@@ -28,4 +28,10 @@ pub mod error;
 pub mod protocol;
 pub mod types;
 
+#[cfg(feature = "tokio")]
+pub mod transport;
+
+#[cfg(feature = "client")]
+pub mod client;
+
 pub use error::Krb5Error;

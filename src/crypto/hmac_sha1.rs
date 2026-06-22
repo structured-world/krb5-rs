@@ -2,7 +2,7 @@
 //!
 //! Computes full HMAC-SHA1 (20 bytes) and truncates to 96 bits (12 bytes).
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha1::Sha1;
 
 type HmacSha1 = Hmac<Sha1>;
