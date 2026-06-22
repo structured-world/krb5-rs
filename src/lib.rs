@@ -31,7 +31,7 @@ pub mod types;
 #[cfg(feature = "tokio")]
 pub mod transport;
 
-#[cfg(feature = "tokio")]
+#[cfg(feature = "client")]
 pub mod client;
 
 pub use error::Krb5Error;

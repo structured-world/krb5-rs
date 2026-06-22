@@ -19,6 +19,11 @@ use super::{KdcTransport, DEFAULT_TCP_TIMEOUT, DEFAULT_UDP_TIMEOUT};
 /// Tries UDP first, then falls back to TCP if the response indicates the
 /// message was too large for UDP. This is the recommended transport for
 /// general use.
+///
+/// Fallback is intentionally limited to protocol-defined size cases: outbound
+/// requests larger than one UDP datagram and KDC `KRB_ERR_RESPONSE_TOO_BIG`
+/// replies. UDP I/O errors and receive timeouts are returned to the caller
+/// instead of being retried over TCP.
 #[derive(Debug, Clone)]
 pub struct UdpTcpTransport {
     /// KDC address (host:port).
@@ -90,6 +95,16 @@ mod tests {
     use tokio::io::AsyncWriteExt;
     use tokio::net::{TcpListener, UdpSocket};
 
+    fn framed_len(len: usize) -> [u8; 4] {
+        u32::try_from(len)
+            .expect("test message length fits in u32")
+            .to_be_bytes()
+    }
+
+    fn read_len(len_buf: [u8; 4]) -> usize {
+        usize::try_from(u32::from_be_bytes(len_buf)).expect("u32 length fits in usize")
+    }
+
     /// Test: successful UDP response (no fallback needed).
     #[tokio::test]
     async fn test_udp_success_no_fallback() {
@@ -146,7 +161,7 @@ mod tests {
             tokio::io::AsyncReadExt::read_exact(&mut stream, &mut len_buf)
                 .await
                 .expect("tcp read len");
-            let req_len = u32::from_be_bytes(len_buf) as usize;
+            let req_len = read_len(len_buf);
             let mut req = vec![0u8; req_len];
             tokio::io::AsyncReadExt::read_exact(&mut stream, &mut req)
                 .await
@@ -154,7 +169,7 @@ mod tests {
 
             // Send TCP response
             let resp = b"tcp-response";
-            let resp_len = (resp.len() as u32).to_be_bytes();
+            let resp_len = framed_len(resp.len());
             stream.write_all(&resp_len).await.expect("tcp write len");
             stream.write_all(resp).await.expect("tcp write body");
             stream.flush().await.expect("tcp flush");

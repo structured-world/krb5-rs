@@ -35,6 +35,14 @@ const MAX_EXCHANGE_STEPS: u32 = 32;
 ///
 /// The client drives protocol state machines over the provided transport,
 /// handling the step loop internally.
+///
+/// Use [`crate::transport::TcpTransport`] or [`crate::transport::UdpTcpTransport`]
+/// for general use. The AS/TGS state machines can request an explicit TCP
+/// retry after a `KRB_ERR_RESPONSE_TOO_BIG` reply; `KerberosClient` cannot force
+/// a transport-specific protocol switch through the generic [`KdcTransport`]
+/// interface, so single-protocol UDP transports surface that retry request as
+/// an error. [`crate::transport::UdpTcpTransport`] performs the UDP-to-TCP retry
+/// internally before the state machine sees the response.
 pub struct KerberosClient<T: KdcTransport> {
     /// Kerberos realm.
     realm: String,
@@ -44,6 +52,10 @@ pub struct KerberosClient<T: KdcTransport> {
 
 impl<T: KdcTransport> KerberosClient<T> {
     /// Create a new client for the given realm and transport.
+    ///
+    /// Prefer TCP-capable transports. A plain UDP transport cannot satisfy an
+    /// AS/TGS state-machine TCP retry request because the generic transport
+    /// interface intentionally does not expose protocol switching.
     pub fn new(realm: impl Into<String>, transport: T) -> Self {
         Self {
             realm: realm.into(),
@@ -96,12 +108,13 @@ impl<T: KdcTransport> KerberosClient<T> {
                     // The state machine requested a retry over TCP
                     // (typically after a RESPONSE_TOO_BIG over UDP),
                     // but this client cannot explicitly force TCP on the
-                    // underlying transport. Retrying via the same API risks
-                    // repeated UDP sends and hitting the step limit.
+                    // underlying generic transport. Retrying via the same API
+                    // can repeat UDP sends for UdpTransport; UdpTcpTransport
+                    // performs the TCP fallback before this point.
                     return Err(Krb5Error::ReplyValidation(
                         "KDC requested TCP retry, but the client transport \
                          cannot explicitly force TCP; configure a TCP-capable \
-                         transport for this realm",
+                         transport such as TcpTransport or UdpTcpTransport",
                     ));
                 }
                 StepResult::Complete => {
@@ -146,8 +159,8 @@ impl<T: KdcTransport> KerberosClient<T> {
                 }
                 TgsStepResult::RetryTcp { .. } => {
                     return Err(Krb5Error::ReplyValidation(
-                        "TGS exchange requested TCP retry, but the client transport does not \
-                         support a TCP-specific retry path",
+                        "TGS exchange requested TCP retry, but the client transport cannot \
+                         explicitly force TCP; configure TcpTransport or UdpTcpTransport",
                     ));
                 }
                 TgsStepResult::Complete => {

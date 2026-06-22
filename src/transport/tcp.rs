@@ -86,7 +86,12 @@ pub(crate) async fn tcp_send_recv(
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "TCP read timed out"))?
         .map_err(Krb5Error::Transport)?;
 
-    let resp_len = u32::from_be_bytes(len_buf) as usize;
+    let resp_len = usize::try_from(u32::from_be_bytes(len_buf)).map_err(|_| {
+        Krb5Error::Transport(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "KDC response length overflows usize",
+        ))
+    })?;
     if resp_len > MAX_KDC_RESPONSE_SIZE {
         return Err(Krb5Error::Transport(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -109,6 +114,16 @@ mod tests {
     use tokio::io::AsyncReadExt;
     use tokio::net::TcpListener;
 
+    fn framed_len(len: usize) -> [u8; 4] {
+        u32::try_from(len)
+            .expect("test message length fits in u32")
+            .to_be_bytes()
+    }
+
+    fn read_len(len_buf: [u8; 4]) -> usize {
+        usize::try_from(u32::from_be_bytes(len_buf)).expect("u32 length fits in usize")
+    }
+
     /// Test TCP framing: length prefix is written and response is read correctly.
     #[tokio::test]
     async fn test_tcp_framing_roundtrip() {
@@ -121,13 +136,13 @@ mod tests {
             // Read length-prefixed request
             let mut len_buf = [0u8; 4];
             stream.read_exact(&mut len_buf).await.expect("read len");
-            let req_len = u32::from_be_bytes(len_buf) as usize;
+            let req_len = read_len(len_buf);
             let mut req = vec![0u8; req_len];
             stream.read_exact(&mut req).await.expect("read body");
 
             // Echo back with length prefix
             let resp = b"mock-response";
-            let resp_len = (resp.len() as u32).to_be_bytes();
+            let resp_len = framed_len(resp.len());
             stream.write_all(&resp_len).await.expect("write len");
             stream.write_all(resp).await.expect("write body");
             stream.flush().await.expect("flush");
@@ -143,11 +158,23 @@ mod tests {
     /// Test TCP timeout on unresponsive server.
     #[tokio::test]
     async fn test_tcp_connect_timeout() {
-        // Use a non-routable address to trigger timeout
-        let addr: SocketAddr = "192.0.2.1:88".parse().expect("parse");
-        let transport = TcpTransport::with_timeout(addr, Duration::from_millis(100));
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+
+        let server = tokio::spawn(async move {
+            let (_stream, _) = listener.accept().await.expect("accept");
+            tokio::time::sleep(Duration::from_secs(10)).await;
+        });
+
+        let transport = TcpTransport::with_timeout(addr, Duration::from_millis(50));
         let result = transport.send_recv("TEST.REALM", b"test").await;
-        assert!(result.is_err());
+        let err = result.expect_err("read should time out");
+        assert!(
+            err.to_string().contains("timed out"),
+            "expected timeout error, got: {err}"
+        );
+
+        server.abort();
     }
 
     /// Test TCP response too large is rejected.
@@ -161,12 +188,12 @@ mod tests {
             // Read the request
             let mut len_buf = [0u8; 4];
             stream.read_exact(&mut len_buf).await.expect("read len");
-            let req_len = u32::from_be_bytes(len_buf) as usize;
+            let req_len = read_len(len_buf);
             let mut req = vec![0u8; req_len];
             stream.read_exact(&mut req).await.expect("read body");
 
             // Send response with absurdly large length
-            let fake_len = ((MAX_KDC_RESPONSE_SIZE + 1) as u32).to_be_bytes();
+            let fake_len = framed_len(MAX_KDC_RESPONSE_SIZE + 1);
             stream.write_all(&fake_len).await.expect("write len");
         });
 
