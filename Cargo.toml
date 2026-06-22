@@ -23,7 +23,7 @@ sha2 = "0.11"
 md-5 = "0.11"              # Legacy RC4-HMAC + GSSAPI channel bindings
 pbkdf2 = "0.12"
 subtle = "2"               # Constant-time comparison
-rand = "0.9"
+rand = "0.10"
 zeroize = { version = "1", features = ["derive"] }
 
 # Flags
