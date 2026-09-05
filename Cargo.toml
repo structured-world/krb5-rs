@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 rust-version = "1.80"
 license = "Apache-2.0"
+authors = ["Dmitry Prudnikov <mail@polaz.com>"]
 description = "Pure Rust Kerberos V5: GSSAPI, SPNEGO, PKINIT. No C FFI, no system krb5 dependency."
 repository = "https://github.com/structured-world/krb5-rs"
 homepage = "https://github.com/structured-world/krb5-rs"
