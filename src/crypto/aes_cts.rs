@@ -4,8 +4,8 @@
 //! For inputs > 1 block, the last two ciphertext blocks are swapped and
 //! the second-to-last is truncated to the actual data length.
 
-use aes::cipher::generic_array::GenericArray;
-use aes::cipher::{BlockDecrypt, BlockEncrypt, KeyInit};
+use aes::cipher::{BlockCipherDecrypt, BlockCipherEncrypt, KeyInit};
+use aes::Block;
 
 use super::CryptoError;
 
@@ -116,14 +116,15 @@ pub(crate) fn aes_ecb_encrypt_block(key: &[u8], block: &[u8]) -> Result<Vec<u8>,
     if block.len() != AES_BLOCK {
         return Err(CryptoError::InputTooShort);
     }
-    let mut out = GenericArray::clone_from_slice(block);
+    let mut out = Block::default();
+    out.copy_from_slice(block);
     match key.len() {
         16 => {
-            let cipher = aes::Aes128::new(GenericArray::from_slice(key));
+            let cipher = aes::Aes128::new_from_slice(key).map_err(|_| CryptoError::BadKeySize)?;
             cipher.encrypt_block(&mut out);
         }
         32 => {
-            let cipher = aes::Aes256::new(GenericArray::from_slice(key));
+            let cipher = aes::Aes256::new_from_slice(key).map_err(|_| CryptoError::BadKeySize)?;
             cipher.encrypt_block(&mut out);
         }
         _ => return Err(CryptoError::BadKeySize),
@@ -178,14 +179,15 @@ fn aes_ecb_decrypt_block(key: &[u8], block: &[u8]) -> Result<Vec<u8>, CryptoErro
     if block.len() != AES_BLOCK {
         return Err(CryptoError::InputTooShort);
     }
-    let mut out = GenericArray::clone_from_slice(block);
+    let mut out = Block::default();
+    out.copy_from_slice(block);
     match key.len() {
         16 => {
-            let cipher = aes::Aes128::new(GenericArray::from_slice(key));
+            let cipher = aes::Aes128::new_from_slice(key).map_err(|_| CryptoError::BadKeySize)?;
             cipher.decrypt_block(&mut out);
         }
         32 => {
-            let cipher = aes::Aes256::new(GenericArray::from_slice(key));
+            let cipher = aes::Aes256::new_from_slice(key).map_err(|_| CryptoError::BadKeySize)?;
             cipher.decrypt_block(&mut out);
         }
         _ => return Err(CryptoError::BadKeySize),
