@@ -15,7 +15,7 @@ readme = "README.md"
 
 [dependencies]
 # ASN.1 DER encoding/decoding
-rasn = "0.28"
+rasn = "0.29"
 
 # Crypto
 aes = "0.9"
